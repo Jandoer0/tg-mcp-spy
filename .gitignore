@@ -21,3 +21,6 @@ PROMT.md
 
 # uv lock не используем (ставим через pip)
 uv.lock
+
+# Редакторные swap-файлы
+*.swp
