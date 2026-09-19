@@ -13,26 +13,25 @@ MCP-сервер для отслеживания **Telegram-каналов** и 
 ## Быстрый старт
 
 ```bash
-./run.sh start          # поднимает контейнер, веб на http://localhost:8090/ui
+podman compose build     # собрать образ (первый раз и после правок)
+podman compose up -d     # запустить в фоне, веб на http://localhost:8090/ui
 ```
 
 Полезные команды:
 
 | Команда | Что делает |
 |---------|------------|
-| `./run.sh build` | собрать образ контейнера |
-| `./run.sh start [порт]` | запустить (по умолчанию 8090) |
-| `./run.sh stop` | остановить |
-| `./run.sh restart [порт]` | перезапустить (при правках кода) |
-| `./run.sh logs` | показывать логи |
-| `./run.sh status` | статус контейнера |
-| `./run.sh dev [порт]` | локальный запуск без контейнера (для отладки) |
-| `./run.sh shell` | зайти внутрь контейнера |
+| `podman compose build` | собрать образ контейнера |
+| `podman compose up -d` | запустить (порт 8090) |
+| `podman compose down` | остановить |
+| `podman compose down && podman compose up -d` | перезапустить (при правках кода) |
+| `podman compose logs -f` | показывать логи |
+| `podman compose ps` | статус контейнера |
 
 Второй независимый экземпляр на другом порту:
 
 ```bash
-./run.sh start 8091
+HOST_PORT=8091 podman compose up -d
 ```
 
 Данные (база SQLite) хранятся в каталоге `./data` на хосте и не теряются
@@ -58,7 +57,7 @@ MCP-сервер доступен по адресу `http://127.0.0.1:8090/mcp` 
 
 ### Hermes agent
 
-Подробная пошаговая инструкция — в [HERMES.md](HERMES.md). Кратко:
+Кратко:
 откройте `~/.hermes/config.yaml`, в раздел `mcp_servers:` добавьте:
 
 ```yaml
