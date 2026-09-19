@@ -34,6 +34,22 @@ podman compose up -d     # запустить в фоне, веб на http://lo
 HOST_PORT=8091 podman compose up -d
 ```
 
+## Образ и GitHub Container Registry
+
+Образ собирается автоматически в GitHub Actions (`.github/workflows/build.yml`)
+при каждом пуше в `master` и публикуется в GitHub Container Registry:
+`ghcr.io/jandoer0/tg-mcp-spy:latest`. На сервере образ **не собирается** —
+`compose.yaml` и `./run.sh start` просто подтягивают его готовым.
+
+- Обновить образ вручную: `./run.sh pull` (или `podman compose pull`).
+- Локальная сборка остаётся как запасной вариант: `./run.sh build`
+  (соберёт образ из исходников прямо на этом сервере).
+
+⚠️ В репозитории должны быть включены GitHub Actions
+(Settings → Actions → General → Allow all actions). Первая публикация образа
+происходит автоматически после первого пуша; до этого `podman compose pull`
+будет недоступен (образа ещё нет в реестре).
+
 Данные (база SQLite) хранятся в каталоге `./data` на хосте и не теряются
 между перезапусками.
 
