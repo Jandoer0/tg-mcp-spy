@@ -51,8 +51,27 @@ MCP-сервер для отслеживания **Telegram-каналов** и 
 
 ## Работа с агентами (Hermes, pi.dev)
 
-MCP-сервер доступен по адресу `http://127.0.0.1:8090/mcp` (streamable-http).
-Готовый конфиг лежит в `.mcp.json` — агенты подхватят его автоматически.
+MCP-сервер доступен по адресу `http://127.0.0.1:8090/mcp` (streamable-http, один порт).
+Готовый конфиг лежит в `.mcp.json` — клиенты вроде **pi.dev** подхватят его автоматически.
+
+### Hermes agent
+
+Подробная пошаговая инструкция — в [HERMES.md](HERMES.md). Кратко:
+откройте `~/.hermes/config.yaml`, в раздел `mcp_servers:` добавьте:
+
+```yaml
+mcp_servers:
+  tg-mcp-spy:
+    url: "http://127.0.0.1:8090/mcp"
+```
+
+Перезапустите Hermes Agent и проверьте: `hermes mcp list`. Инструменты
+появятся с префиксом `mcp_tg_mcp_spy_*`.
+
+### pi.dev
+
+Используйте готовый `.mcp.json` (указывает на `http://127.0.0.1:8090/mcp`).
+При необходимости добавьте MCP-сервер в настройках проекта pi.dev с тем же URL.
 
 Основные инструменты для агента:
 - `add_channel_tool` / `remove_channel_tool` / `list_channels_tool` — Telegram;
