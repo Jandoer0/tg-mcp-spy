@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Service dirs
+.idea/
+*.db
+*.db-wal
+*.db-shm
+
+# Локальные данные и инструкции агента
+/data/
+PROMT.md
+
+# uv lock не используем (ставим через pip)
+uv.lock

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>tg-mcp-spy · Подписки</title>
+  <style>
+    :root {
+      --bg: #0f1115; --card: #181b22; --line: #262b35; --text: #e6e9ef;
+      --muted: #9aa3b2; --accent: #4f8cff; --tg: #2aabee; --rss: #ff8c42; --danger: #ff5c5c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5; }
+    header { padding: 24px 20px 8px; border-bottom: 1px solid var(--line); }
+    header h1 { margin: 0; font-size: 22px; }
+    .sub { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+    main { max-width: 880px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    .card h2 { margin: 0 0 10px; font-size: 16px; }
+    .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+    code { background: #0c0e12; padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    input { flex: 1 1 160px; background: #0c0e12; border: 1px solid var(--line);
+      color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 14px; }
+    button { background: var(--accent); color: #fff; border: 0; padding: 9px 14px;
+      border-radius: 8px; font-size: 14px; cursor: pointer; }
+    button:hover { filter: brightness(1.08); }
+    button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+    button.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 4px 10px; font-size: 12px; }
+    button.link { background: transparent; border: 0; color: var(--accent); cursor: pointer; padding: 4px 8px; font-size: 12px; }
+    .sources { display: grid; gap: 8px; }
+    .src { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .src .name { font-weight: 600; }
+    .src .meta { color: var(--muted); font-size: 12px; flex: 1; word-break: break-all; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+    .badge.telegram { background: rgba(42,171,238,.15); color: var(--tg); }
+    .badge.rss { background: rgba(255,140,66,.15); color: var(--rss); }
+    .posts { display: grid; gap: 10px; max-height: 420px; overflow: auto; }
+    .post { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .post .date { color: var(--muted); font-size: 12px; }
+    .post .text { white-space: pre-wrap; font-size: 14px; margin-top: 4px; }
+    .post a { color: var(--accent); }
+    .empty { color: var(--muted); font-size: 14px; }
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      background: #222; border: 1px solid var(--line); color: var(--text); padding: 10px 16px;
+      border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .25s; font-size: 14px; }
+    .toast.show { opacity: 1; }
+    .toast.err { border-color: var(--danger); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🕵️ tg-mcp-spy</h1>
+    <p class="sub">Управление подписками на Telegram-каналы и RSS/RSSHub-ленты</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Список подписок</h2>
+      <button id="refresh" class="ghost">Обновить список</button>
+      <div id="sources" class="sources">Загрузка…</div>
+    </section>
+
+    <section class="card">
+      <h2>Добавить Telegram-канал</h2>
+      <p class="hint">Просто имя канала без @, например <code>durov</code></p>
+      <form id="form-tg" class="row">
+        <input name="name" placeholder="имя канала" required />
+        <button type="submit">Добавить</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Добавить Telegram через RSSHub</h2>
+      <p class="hint">Берёт посты канала через RSSHub (полезно, если t.me недоступен).</p>
+      <form id="form-rsshub" class="row">
+        <input name="username" placeholder="имя канала" required />
+        <input name="base" placeholder="RSSHub база (необязательно)" />
+        <button type="submit">Добавить через RSSHub</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Добавить RSS/RSSHub ленту</h2>
+      <p class="hint">Любой RSS-канал или RSSHub-маршрут (например <code>https://rsshub.app/telegram/channel/durov</code>).</p>
+      <form id="form-rss" class="row">
+        <input name="name" placeholder="метка (латиницей)" required />
+        <input name="url" placeholder="https://.../feed.xml" required />
+        <button type="submit">Добавить ленту</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Последние посты</h2>
+      <div id="posts" class="posts">Выберите подписку выше, чтобы увидеть посты.</div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const toastEl = $("#toast");
+    let toastTimer;
+    function toast(msg, isErr = false) {
+      toastEl.textContent = msg;
+      toastEl.className = "toast show" + (isErr ? " err" : "");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => (toastEl.className = "toast"), 2600);
+    }
+    async function api(path, opts) {
+      const res = await fetch(path, opts);
+      let data = null;
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error((data && data.error) || `Ошибка ${res.status}`);
+      return data;
+    }
+    function escapeHtml(s) {
+      return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+    async function loadSources() {
+      const box = $("#sources");
+      try {
+        const sources = await api("/api/sources");
+        if (!sources.length) {
+          box.innerHTML = '<div class="empty">Пока нет подписок. Добавьте канал или ленту ниже.</div>';
+          return;
+        }
+        box.innerHTML = "";
+        for (const s of sources) {
+          const el = document.createElement("div");
+          el.className = "src";
+          const meta = s.kind === "rss" && s.url ? s.url : `добавлен ${s.added_at}`;
+          el.innerHTML = `<span class="badge ${s.kind}">${s.kind}</span>
+            <span class="name">@${s.name}</span>
+            <span class="meta">${meta}</span>
+            <button class="link" data-posts="${s.name}">посты</button>
+            <button class="danger" data-del="${s.name}">удалить</button>`;
+          box.appendChild(el);
+        }
+        box.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => delSource(b.dataset.del)));
+        box.querySelectorAll("[data-posts]").forEach((b) => b.addEventListener("click", () => loadPosts(b.dataset.posts)));
+      } catch (e) {
+        box.innerHTML = `<div class="empty">Не удалось загрузить: ${e.message}</div>`;
+      }
+    }
+    async function delSource(name) {
+      if (!confirm(`Удалить подписку @${name}?`)) return;
+      try {
+        await api(`/api/sources/${encodeURIComponent(name)}`, { method: "DELETE" });
+        toast("Удалено");
+        loadSources();
+      } catch (e) { toast(e.message, true); }
+    }
+    async function loadPosts(name) {
+      const box = $("#posts");
+      box.innerHTML = "Загрузка…";
+      try {
+        const data = await api(`/api/posts?source=${encodeURIComponent(name)}`);
+        if (!data.posts.length) {
+          box.innerHTML = '<div class="empty">Постов пока нет. Запросите их через MCP-инструмент query_posts.</div>';
+          return;
+        }
+        box.innerHTML = "";
+        for (const p of data.posts) {
+          const el = document.createElement("div");
+          el.className = "post";
+          const url = p.url ? `<a href="${p.url}" target="_blank" rel="noopener">открыть</a>` : "";
+          el.innerHTML = `<div class="date">${p.date || "—"} · ${url}</div><div class="text">${escapeHtml(p.text)}</div>`;
+          box.appendChild(el);
+        }
+      } catch (e) { box.innerHTML = `<div class="empty">${e.message}</div>`; }
+    }
+    $("#refresh").addEventListener("click", loadSources);
+    $("#form-tg").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = e.target.name.value.trim();
+      try {
+        await api("/api/sources", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "telegram", name }) });
+        toast("Канал добавлен"); e.target.reset(); loadSources();
+      } catch (err) { toast(err.message, true); }
+    });
+    $("#form-rss").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = e.target.name.value.trim();
+      const url = e.target.url.value.trim();
+      try {
+        await api("/api/sources", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "rss", name, url }) });
+        toast("Лента добавлена"); e.target.reset(); loadSources();
+      } catch (err) { toast(err.message, true); }
+    });
+    $("#form-rsshub").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = e.target.username.value.trim();
+      const base = e.target.base.value.trim();
+      try {
+        const { url } = await api(`/api/rsshub?username=${encodeURIComponent(username)}` +
+          (base ? `&base=${encodeURIComponent(base)}` : ""));
+        await api("/api/sources", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "rss", name: username, url }) });
+        toast("Добавлено через RSSHub"); e.target.reset(); loadSources();
+      } catch (err) { toast(err.message, true); }
+    });
+    loadSources();
+  </script>
+</body>
+</html>
