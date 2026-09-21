@@ -28,3 +28,6 @@ uv.lock
 # Локальные файлы, не публикуемые в форк
 run.sh
 HERMES.md
+
+screenshots/
+Screenshot*

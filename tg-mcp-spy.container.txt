@@ -1,0 +1,27 @@
+[Unit]
+Description=Telegram MCP Spy
+After=network.target services-net.network
+Requires=services-net.network
+
+
+[Container]
+Image=ghcr.io/jandoer0/tg-mcp-spy:latest
+AutoUpdate=registry
+ContainerName=tg-mcp-spy
+
+PublishPort=8091:8000
+
+Environment=HOST=0.0.0.0
+Environment=PORT=8000
+Environment=DB_PATH=/app/data/telegram_cache.db
+Environment=RSSHUB_BASE_URL=https://rsshub.local
+
+Volume=/home/podman-svc/pod/tg-mcp-spy/data:/app/data:Z,U
+
+Network=services-net.network
+
+[Service]
+Restart=unless-stopped
+
+[Install]
+WantedBy=default.target
