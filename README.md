@@ -53,6 +53,34 @@ HOST_PORT=8091 podman compose up -d
 Данные (база SQLite) хранятся в каталоге `./data` на хосте и не теряются
 между перезапусками.
 
+## Развёртывание на удалённом сервере (podman quadlet)
+
+Продакшен крутится на сервере `podman-svc@192.168.100.100` через **podman quadlet**
+(файл `tg-mcp-spy.container`, systemd-юнит `tg-mcp-spy.service`, порт `8091`).
+Код «запечён» в образ, поэтому после правок нужно пересобрать образ на сервере
+и перезапустить сервис. Всё это делает одна команда:
+
+```bash
+./run.sh deploy        # синхронизировать код → собрать образ → рестарт
+```
+
+Остальные удалённые команды: `rrestart`, `rstart`, `rstop`, `rstatus`,
+`rlogs`, `rshell`, `rreload` (см. `./run.sh help`).
+
+### Парольная фраза SSH-ключа
+
+Ключ `c:\Users\User\.ssh\id_rsa_home` защищён парольной фразой. Чтобы скрипт
+подключался без повторного ввода, добавьте ключ в **OpenSSH Authentication Agent**
+(фраза хранится в Windows Credential Manager и переживает перезагрузку):
+
+```powershell
+Set-Service ssh-agent -StartupType Automatic
+Start-Service ssh-agent
+ssh-add c:\Users\User\.ssh\id_rsa_home   # спросит фразу один раз
+```
+
+Если меняли `tg-mcp-spy.container` на сервере — примените `./run.sh rreload`.
+
 ## Веб-интерфейс
 
 Откройте в браузере: **http://localhost:8090/ui**

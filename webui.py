@@ -75,17 +75,45 @@ async def api_source(request: Request) -> JSONResponse:
 
 async def api_posts(request: Request) -> JSONResponse:
     name = request.query_params.get("source", "").strip().lower().lstrip("@")
-    if not name:
-        return JSONResponse({"error": "Укажите ?source=имя"}, status_code=400)
-    src = get_source(name)
-    if not src:
-        return JSONResponse({"error": "Подписка не найдена"}, status_code=404)
-    rows = get_posts([src["id"]], "1970-01-01")[:50]
+    try:
+        limit = int(request.query_params.get("limit", "50"))
+    except ValueError:
+        limit = 50
+    limit = max(1, min(limit, 200))
+
+    if name:
+        # Посты конкретной подписки
+        src = get_source(name)
+        if not src:
+            return JSONResponse({"error": "Подписка не найдена"}, status_code=404)
+        rows = get_posts([src["id"]], "1970-01-01")[:limit]
+        return JSONResponse(
+            {
+                "source": name,
+                "kind": src["kind"],
+                "global": False,
+                "posts": [
+                    {"date": p["date"], "text": p["text"], "url": p["url"]}
+                    for p in rows
+                ],
+            }
+        )
+
+    # Без source — последние посты по всем подпискам (главный экран)
+    rows = get_posts([s["id"] for s in list_sources()], "1970-01-01")[:limit]
     return JSONResponse(
         {
-            "source": name,
-            "kind": src["kind"],
-            "posts": [{"date": p["date"], "text": p["text"], "url": p["url"]} for p in rows],
+            "global": True,
+            "posts": [
+                {
+                    "date": p["date"],
+                    "text": p["text"],
+                    "url": p["url"],
+                    "source": p["source"],
+                    "kind": p["kind"],
+                }
+                for p in rows
+            ],
         }
     )
 

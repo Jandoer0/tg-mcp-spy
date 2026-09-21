@@ -12,12 +12,18 @@
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       background: var(--bg); color: var(--text); line-height: 1.5; }
-    header { padding: 24px 20px 8px; border-bottom: 1px solid var(--line); text-align: center; }
+    header { padding: 24px 20px 0; border-bottom: 1px solid var(--line); text-align: center; }
     header h1 { margin: 0; font-size: 22px; }
-    .sub { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+    .sub { color: var(--muted); margin: 4px 0 12px; font-size: 14px; }
+    .tabs { display: inline-flex; gap: 4px; padding: 0 12px; }
+    .tab { background: transparent; border: 0; border-bottom: 2px solid transparent;
+      color: var(--muted); padding: 10px 18px; font-size: 15px; cursor: pointer; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
     main { max-width: 880px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+    .hidden { display: none !important; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
-    .card h2 { margin: 0 0 10px; font-size: 16px; }
+    .card h2 { margin: 0 0 10px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
     .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
     code { background: #0c0e12; padding: 1px 6px; border-radius: 6px; font-size: 12px; }
     .row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -30,69 +36,85 @@
     button.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 4px 10px; font-size: 12px; }
     button.link { background: transparent; border: 0; color: var(--accent); cursor: pointer; padding: 4px 8px; font-size: 12px; }
     .sources { display: grid; gap: 8px; }
-    .src { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    /* Блок подписки: первая строка — имя и кнопки, вторая — ссылка */
+    .src { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .src .top { display: flex; align-items: center; gap: 10px; }
     .src .name { font-weight: 600; }
-    .src .meta { color: var(--muted); font-size: 12px; flex: 1; word-break: break-all; }
+    .src .meta { flex: 1; }
+    .src .url { display: block; max-width: 100%; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; color: var(--muted); font-size: 12px; text-decoration: none; }
+    .src .url:hover { color: var(--accent); }
     .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
     .badge.telegram { background: rgba(42,171,238,.15); color: var(--tg); }
     .badge.rss { background: rgba(255,140,66,.15); color: var(--rss); }
-    .posts { display: grid; gap: 10px; max-height: 420px; overflow: auto; }
+    .posts { display: grid; gap: 10px; max-height: 70vh; overflow: auto; }
     .post { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-    .post .date { color: var(--muted); font-size: 12px; }
+    .post .posthead { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .post .srcname { color: var(--accent); }
     .post .text { white-space: pre-wrap; font-size: 14px; margin-top: 4px; }
     .post a { color: var(--accent); }
     .empty { color: var(--muted); font-size: 14px; }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
       background: #222; border: 1px solid var(--line); color: var(--text); padding: 10px 16px;
-      border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .25s; font-size: 14px; }
+      border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .25s; font-size: 14px; max-width: 90vw; }
     .toast.show { opacity: 1; }
     .toast.err { border-color: var(--danger); }
   </style>
 </head>
 <body>
   <header>
+    <h1>tg-mcp-spy</h1>
     <p class="sub">Управление подписками на Telegram-каналы и RSS/RSSHub-ленты</p>
+    <nav class="tabs">
+      <button class="tab active" data-tab="posts">Последние посты</button>
+      <button class="tab" data-tab="subs">Подписки</button>
+    </nav>
   </header>
 
   <main>
-    <section class="card">
-      <h2>Список подписок</h2>
-      <button id="refresh" class="ghost">Обновить список</button>
-      <div id="sources" class="sources">Загрузка…</div>
+    <!-- Вкладка 1: последние посты (главная) -->
+    <section id="tab-posts" class="tab-panel">
+      <div class="card">
+        <h2>Последние посты <button id="refresh-posts" class="ghost">Обновить</button></h2>
+        <div id="posts" class="posts">Загрузка…</div>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Добавить Telegram-канал</h2>
-      <p class="hint">Просто имя канала без @, например <code>durov</code></p>
-      <form id="form-tg" class="row">
-        <input name="name" placeholder="имя канала" required />
-        <button type="submit">Добавить</button>
-      </form>
-    </section>
+    <!-- Вкладка 2: подписки и добавление -->
+    <section id="tab-subs" class="tab-panel hidden">
+      <div class="card">
+        <h2>Список подписок <button id="refresh" class="ghost">Обновить список</button></h2>
+        <div id="sources" class="sources">Загрузка…</div>
+      </div>
 
-    <section class="card">
-      <h2>Добавить Telegram через RSSHub</h2>
-      <p class="hint">Берёт посты канала через RSSHub (полезно, если t.me недоступен).</p>
-      <form id="form-rsshub" class="row">
-        <input name="username" placeholder="имя канала" required />
-        <input name="base" placeholder="RSSHub база (необязательно)" />
-        <button type="submit">Добавить через RSSHub</button>
-      </form>
-    </section>
+      <div class="card">
+        <h2>Добавить Telegram-канал</h2>
+        <p class="hint">Просто имя канала без @, например <code>durov</code></p>
+        <form id="form-tg" class="row">
+          <input name="name" placeholder="имя канала" required />
+          <button type="submit">Добавить</button>
+        </form>
+      </div>
 
-    <section class="card">
-      <h2>Добавить RSS/RSSHub ленту</h2>
-      <p class="hint">Любой RSS-канал или RSSHub-маршрут (например <code>https://rsshub.app/telegram/channel/durov</code>).</p>
-      <form id="form-rss" class="row">
-        <input name="name" placeholder="метка (латиницей)" required />
-        <input name="url" placeholder="https://.../feed.xml" required />
-        <button type="submit">Добавить ленту</button>
-      </form>
-    </section>
+      <div class="card">
+        <h2>Добавить Telegram через RSSHub</h2>
+        <p class="hint">Берёт посты канала через RSSHub (полезно, если t.me недоступен).</p>
+        <form id="form-rsshub" class="row">
+          <input name="username" placeholder="имя канала" required />
+          <input name="base" placeholder="RSSHub база (необязательно)" />
+          <button type="submit">Добавить через RSSHub</button>
+        </form>
+      </div>
 
-    <section class="card">
-      <h2>Последние посты</h2>
-      <div id="posts" class="posts">Выберите подписку выше, чтобы увидеть посты.</div>
+      <div class="card">
+        <h2>Добавить RSS/RSSHub ленту</h2>
+        <p class="hint">Любой RSS-канал или RSSHub-маршрут (например <code>https://rsshub.app/telegram/channel/durov</code>).</p>
+        <form id="form-rss" class="row">
+          <input name="name" placeholder="метка (латиницей)" required />
+          <input name="url" placeholder="https://.../feed.xml" required />
+          <button type="submit">Добавить ленту</button>
+        </form>
+      </div>
     </section>
   </main>
 
@@ -118,6 +140,19 @@
     function escapeHtml(s) {
       return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
+
+    // ----- Вкладки -----
+    function switchTab(tab) {
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+      $("#tab-posts").classList.toggle("hidden", tab !== "posts");
+      $("#tab-subs").classList.toggle("hidden", tab !== "subs");
+      if (tab === "posts") loadPosts();
+    }
+    document.querySelectorAll(".tab").forEach((t) =>
+      t.addEventListener("click", () => switchTab(t.dataset.tab))
+    );
+
+    // ----- Список подписок (вкладка "Подписки") -----
     async function loadSources() {
       const box = $("#sources");
       try {
@@ -130,16 +165,23 @@
         for (const s of sources) {
           const el = document.createElement("div");
           el.className = "src";
-          const meta = s.kind === "rss" && s.url ? s.url : `добавлен ${s.added_at}`;
-          el.innerHTML = `<span class="badge ${s.kind}">${s.kind}</span>
-            <span class="name">@${s.name}</span>
-            <span class="meta">${meta}</span>
-            <button class="link" data-posts="${s.name}">посты</button>
-            <button class="danger" data-del="${s.name}">удалить</button>`;
+          // Ссылка второй строкой: для rss — url ленты, для telegram — t.me/<name>
+          const href = s.kind === "rss" && s.url ? s.url : `https://t.me/${s.name}`;
+          el.innerHTML = `
+            <div class="top">
+              <span class="badge ${s.kind}">${s.kind}</span>
+              <span class="name">@${escapeHtml(s.name)}</span>
+              <span class="meta"></span>
+              <button class="link" data-posts="${escapeHtml(s.name)}">посты</button>
+              <button class="danger" data-del="${escapeHtml(s.name)}">удалить</button>
+            </div>
+            <a class="url" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
           box.appendChild(el);
         }
         box.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => delSource(b.dataset.del)));
-        box.querySelectorAll("[data-posts]").forEach((b) => b.addEventListener("click", () => loadPosts(b.dataset.posts)));
+        box.querySelectorAll("[data-posts]").forEach((b) =>
+          b.addEventListener("click", () => { switchTab("posts"); loadPosts(b.dataset.posts); })
+        );
       } catch (e) {
         box.innerHTML = `<div class="empty">Не удалось загрузить: ${e.message}</div>`;
       }
@@ -152,11 +194,18 @@
         loadSources();
       } catch (e) { toast(e.message, true); }
     }
+
+    // ----- Посты (вкладка "Последние посты") -----
+    let currentSource = ""; // "" = все подписки
     async function loadPosts(name) {
+      if (typeof name === "string") currentSource = name;
       const box = $("#posts");
       box.innerHTML = "Загрузка…";
+      const path = currentSource
+        ? `/api/posts?source=${encodeURIComponent(currentSource)}`
+        : "/api/posts";
       try {
-        const data = await api(`/api/posts?source=${encodeURIComponent(name)}`);
+        const data = await api(path);
         if (!data.posts.length) {
           box.innerHTML = '<div class="empty">Постов пока нет. Запросите их через MCP-инструмент query_posts.</div>';
           return;
@@ -165,13 +214,17 @@
         for (const p of data.posts) {
           const el = document.createElement("div");
           el.className = "post";
-          const url = p.url ? `<a href="${p.url}" target="_blank" rel="noopener">открыть</a>` : "";
-          el.innerHTML = `<div class="date">${p.date || "—"} · ${url}</div><div class="text">${escapeHtml(p.text)}</div>`;
+          const url = p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">открыть</a>` : "";
+          const srcTag = p.source ? `<span class="srcname">@${escapeHtml(p.source)}</span> · ` : "";
+          el.innerHTML = `<div class="posthead">${srcTag}${escapeHtml(p.date || "—")} · ${url}</div><div class="text">${escapeHtml(p.text)}</div>`;
           box.appendChild(el);
         }
       } catch (e) { box.innerHTML = `<div class="empty">${e.message}</div>`; }
     }
+
+    // ----- Формы добавления -----
     $("#refresh").addEventListener("click", loadSources);
+    $("#refresh-posts").addEventListener("click", () => loadPosts());
     $("#form-tg").addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = e.target.name.value.trim();
@@ -203,7 +256,10 @@
         toast("Добавлено через RSSHub"); e.target.reset(); loadSources();
       } catch (err) { toast(err.message, true); }
     });
+
+    // Стартовая загрузка: список подписок + последние посты (главная вкладка)
     loadSources();
+    loadPosts();
   </script>
 </body>
 </html>
