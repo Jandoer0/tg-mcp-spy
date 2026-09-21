@@ -14,7 +14,7 @@ PublishPort=8091:8000
 Environment=HOST=0.0.0.0
 Environment=PORT=8000
 Environment=DB_PATH=/app/data/telegram_cache.db
-Environment=RSSHUB_BASE_URL=https://rsshub.local
+Environment=RSSHUB_BASE_URL=https://rsshub.app
 
 Volume=/home/podman-svc/pod/tg-mcp-spy/data:/app/data:Z,U
 
