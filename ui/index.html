@@ -11,7 +11,7 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: var(--bg); color: var(--text); line-height: 1.5; }
+      background: var(--bg); color: var(--text); line-height: 1.5; overflow-x: hidden; }
     header { padding: 24px 20px 0; border-bottom: 1px solid var(--line); text-align: center; }
     header h1 { margin: 0; font-size: 22px; }
     .sub { color: var(--muted); margin: 4px 0 12px; font-size: 14px; }
@@ -49,9 +49,10 @@
     .badge.rss { background: rgba(255,140,66,.15); color: var(--rss); }
     .posts { display: grid; gap: 10px; max-height: 70vh; overflow: auto; }
     .post { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-    .post .posthead { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .post .posthead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
     .post .srcname { color: var(--accent); }
-    .post .text { white-space: pre-wrap; font-size: 14px; margin-top: 4px; }
+    .post .text { white-space: pre-wrap; font-size: 14px; margin-top: 4px; overflow-wrap: anywhere; word-break: break-word; }
+    .post .text img { max-width: 100%; height: auto; }
     .post a { color: var(--accent); }
     .empty { color: var(--muted); font-size: 14px; }
     .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -141,6 +142,31 @@
       return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
 
+    // Безопасный рендер HTML из лент (убираем script/style, обработчики on* и опасные ссылки)
+    function sanitizeHtml(html) {
+      const tpl = document.createElement("template");
+      tpl.innerHTML = html || "";
+      tpl.content.querySelectorAll("script,style,iframe,object,embed,link,meta,noscript").forEach((e) => e.remove());
+      tpl.content.querySelectorAll("*").forEach((el) => {
+        for (const a of Array.from(el.attributes)) {
+          const n = a.name.toLowerCase();
+          const v = a.value.trim().toLowerCase();
+          if (n.startsWith("on") || ((n === "href" || n === "src") && (v.startsWith("javascript:") || v.startsWith("data:text/html")))) {
+            el.removeAttribute(a.name);
+          }
+        }
+      });
+      tpl.content.querySelectorAll("a").forEach((a) => { a.setAttribute("target", "_blank"); a.setAttribute("rel", "noopener"); });
+      return tpl.innerHTML;
+    }
+    // Если в тексте есть HTML-разметка (списки, ссылки) — рендерим безопасно,
+    // иначе экранируем и сохраняем переносы строк.
+    function renderBody(text) {
+      const t = text || "";
+      if (/<[a-z][\s\S]*>/i.test(t)) return sanitizeHtml(t);
+      return escapeHtml(t).replace(/\n/g, "<br>");
+    }
+
     // ----- Вкладки -----
     function switchTab(tab) {
       document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
@@ -216,7 +242,7 @@
           el.className = "post";
           const url = p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">открыть</a>` : "";
           const srcTag = p.source ? `<span class="srcname">@${escapeHtml(p.source)}</span> · ` : "";
-          el.innerHTML = `<div class="posthead">${srcTag}${escapeHtml(p.date || "—")} · ${url}</div><div class="text">${escapeHtml(p.text)}</div>`;
+          el.innerHTML = `<div class="posthead">${srcTag}${escapeHtml(p.date || "—")} · ${url}</div><div class="text">${renderBody(p.text)}</div>`;
           box.appendChild(el);
         }
       } catch (e) { box.innerHTML = `<div class="empty">${e.message}</div>`; }
