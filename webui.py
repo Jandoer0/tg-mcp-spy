@@ -5,6 +5,7 @@
 Страница доступна по адресу /ui, API — по /api/*.
 """
 from pathlib import Path
+from datetime import datetime, timezone
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -13,6 +14,7 @@ from db import (
     add_source,
     remove_source,
     list_sources,
+    list_sources_with_id,
     get_source,
     get_posts,
 )
@@ -62,17 +64,6 @@ async def api_sources(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "source": src}, status_code=201)
 
 
-async def api_source(request: Request) -> JSONResponse:
-    # DELETE /api/sources/{name}
-    name = request.path_params["name"]
-    if request.method == "DELETE":
-        ok = remove_source(name)
-        if not ok:
-            return JSONResponse({"error": "Не найдено"}, status_code=404)
-        return JSONResponse({"ok": True})
-    return JSONResponse({"error": "Метод не поддерживается"}, status_code=405)
-
-
 async def api_posts(request: Request) -> JSONResponse:
     name = request.query_params.get("source", "").strip().lower().lstrip("@")
     try:
@@ -118,6 +109,39 @@ async def api_posts(request: Request) -> JSONResponse:
     )
 
 
+async def api_refresh_posts(request: Request) -> JSONResponse:
+    async def _fetch(source: dict) -> None:
+        if source["kind"] == "telegram":
+            _refresh_telegram(source, cut_off_str)
+        else:
+            _refresh_rss(source)
+
+    try:
+        if request.method != "POST":
+            return JSONResponse({"error": "Метод не поддерживается"}, status_code=405)
+        data = await request.json()
+        only_kind = (data.get("kind") or "").strip()
+        sources = (
+            list_sources_with_id(only_kind)
+            if only_kind
+            else list_sources_with_id()
+        )
+        if not sources:
+            return JSONResponse({"ok": True, "fetched": 0})
+
+        ok, failed = 0, 0
+        for src in sources:
+            try:
+                await _fetch(src)
+            except Exception:
+                failed += 1
+                continue
+            ok += 1
+        return JSONResponse({"ok": True, "fetched": ok, "failed": failed})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 async def api_rsshub(request: Request) -> JSONResponse:
     username = request.query_params.get("username", "").strip()
     base = request.query_params.get("base", "").strip() or DEFAULT_RSSHUB
@@ -133,4 +157,5 @@ def register_ui(mcp):
     mcp.custom_route("/api/sources", methods=["GET", "POST"])(api_sources)
     mcp.custom_route("/api/sources/{name:path}", methods=["DELETE"])(api_source)
     mcp.custom_route("/api/posts", methods=["GET"])(api_posts)
+    mcp.custom_route("/api/refresh/posts", methods=["POST"])(api_refresh_posts)
     mcp.custom_route("/api/rsshub", methods=["GET"])(api_rsshub)

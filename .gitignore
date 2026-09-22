@@ -18,6 +18,7 @@ wheels/
 # Локальные данные и инструкции агента
 /data/
 PROMT.md
+tg-mcp-spy.container
 
 # uv lock не используем (ставим через pip)
 uv.lock
@@ -31,3 +32,6 @@ HERMES.md
 
 screenshots/
 Screenshot*
+
+# Локальные бэкапы веб-интерфейса (не публиковать в форк)
+*.html.bak

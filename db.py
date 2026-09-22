@@ -95,6 +95,19 @@ def list_sources(kind: Optional[str] = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def list_sources_with_id(kind: Optional[str] = None) -> list[dict]:
+    """Возвращает подписки с id — нужно для пересборки постов (refresh)."""
+    conn = get_conn()
+    sql = "SELECT id, kind, name, url, added_at FROM sources ORDER BY name"
+    params = []
+    if kind:
+        sql += " WHERE kind = ?"
+        params.append(kind)
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_source(name: str) -> Optional[dict]:
     name = name.strip().lower().lstrip("@")
     conn = get_conn()
@@ -151,18 +164,19 @@ def get_oldest_post_date(source_id: int) -> Optional[str]:
 
 
 def get_posts(source_ids: list[int], since_date: str) -> list[dict]:
+    """Посты подписок с даты ``since_date`` (не учитывая source_ids)."""
     if not source_ids:
         return []
     conn = get_conn()
-    placeholders = ",".join("?" * len(source_ids))
-    rows = conn.execute(
-        f"""SELECT p.id, s.name AS source, s.kind, p.ext_id, p.text, p.date, p.url
-            FROM posts p
-            JOIN sources s ON s.id = p.source_id
-            WHERE p.source_id IN ({placeholders})
-              AND p.date >= ?
-            ORDER BY p.date DESC, p.ext_id DESC""",
-        (*source_ids, since_date),
-    ).fetchall()
+    n = len(source_ids)
+    placeholders = ",".join(["?"] * n)
+    sql = """
+        SELECT p.id, s.name AS source, s.kind, p.ext_id, p.text, p.date, p.url
+        FROM posts p JOIN sources s ON s.id = p.source_id
+        WHERE s.id IN (%s)
+          AND p.date >= ?
+        ORDER BY p.date DESC, p.ext_id DESC
+    """ % placeholders
+    rows = conn.execute(sql, (*source_ids, since_date)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
