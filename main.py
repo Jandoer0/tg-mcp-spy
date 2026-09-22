@@ -23,13 +23,10 @@ from db import (
     remove_source,
     list_sources,
     get_source,
-    save_posts,
-    get_oldest_post_date,
     get_posts,
 )
-from tg_parser import fetch_page, parse_posts
-from rss_parser import fetch_feed, parse_feed, rsshub_telegram_url, DEFAULT_RSSHUB
-from webui import register_ui
+from rss_parser import rsshub_telegram_url, DEFAULT_RSSHUB
+from webui import register_ui, _refresh_telegram, _refresh_rss
 
 RSSHUB_BASE_URL = os.environ.get("RSSHUB_BASE_URL", DEFAULT_RSSHUB)
 
@@ -118,37 +115,8 @@ def add_rsshub_channel_tool(username: str, base: str | None = None) -> str:
 
 # --------------------------------------------------------------------------- #
 # Получение постов
+# (функции _refresh_telegram / _refresh_rss импортированы из webui)
 # --------------------------------------------------------------------------- #
-def _refresh_telegram(source: dict, cutoff: str):
-    channelname = source["name"]
-    before = None
-    for _ in range(10):
-        if before is not None:
-            oldest = get_oldest_post_date(source["id"])
-            if oldest and oldest < cutoff:
-                break
-        try:
-            html = fetch_page(channelname, before)
-        except Exception:
-            break
-        posts = parse_posts(html)
-        if not posts:
-            break
-        save_posts(source["id"], posts)
-        if posts[-1]["date"] and posts[-1]["date"] < cutoff:
-            break
-        before = posts[-1]["ext_id"]
-
-
-def _refresh_rss(source: dict):
-    try:
-        content = fetch_feed(source["url"])
-    except Exception:
-        return
-    posts = parse_feed(content)
-    save_posts(source["id"], posts)
-
-
 @mcp.tool()
 def query_posts(sources: list[str] | None = None, days: int = 1) -> str:
     """Найти посты за последние N дней по подпискам (Telegram и RSS).

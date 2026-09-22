@@ -117,7 +117,7 @@
     <!-- Вкладка 1: последние посты (главная) -->
     <section id="tab-posts" class="tab-panel">
       <div class="card">
-        <h2>Последние посты <button id="refresh-posts" class="ghost">Обновить</button></h2>
+        <h2>Последние посты <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button></h2>
         <div id="posts" class="posts">Загрузка…</div>
       </div>
     </section>
@@ -125,7 +125,7 @@
     <!-- Вкладка 2: подписки и добавление -->
     <section id="tab-subs" class="tab-panel hidden">
       <div class="card">
-        <h2>Список подписок <button id="refresh" class="ghost">Обновить список</button></h2>
+        <h2>Список подписок</h2>
         <div id="sources" class="sources">Загрузка…</div>
       </div>
 
@@ -290,8 +290,29 @@
     }
 
     // ----- Формы добавления -----
-    $("#refresh").addEventListener("click", loadSources);
-    $("#refresh-posts").addEventListener("click", () => loadPosts());
+    // Кнопка «Свежие за 24ч»: подтягивает посты за последние сутки из
+    // Telegram/RSS и перезагружает ленту. Реальная пересборка идёт на
+    // бэкенде (POST /api/refresh/posts), здесь только триггер + индикация.
+    $("#refresh-posts").addEventListener("click", async () => {
+      const btn = $("#refresh-posts");
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Обновление…";
+      try {
+        const r = await api("/api/refresh/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days: 1 }),
+        });
+        toast(`Подтянуто: ${r.fetched ?? 0} источников (ошибок: ${r.failed ?? 0})`);
+        loadPosts();
+      } catch (e) {
+        toast(e.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
     $("#form-tg").addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = e.target.name.value.trim();

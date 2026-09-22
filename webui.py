@@ -5,7 +5,7 @@
 Страница доступна по адресу /ui, API — по /api/*.
 """
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -16,8 +16,11 @@ from db import (
     list_sources_with_id,
     get_source,
     get_posts,
+    get_oldest_post_date,
+    save_posts,
 )
-from rss_parser import rsshub_telegram_url, DEFAULT_RSSHUB
+from tg_parser import fetch_page, parse_posts
+from rss_parser import fetch_feed, parse_feed, rsshub_telegram_url, DEFAULT_RSSHUB
 
 UI_DIR = Path(__file__).parent / "ui"
 
@@ -108,7 +111,46 @@ async def api_posts(request: Request) -> JSONResponse:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Пересборка постов из источников (Telegram t.me/s или RSS/RSSHub)
+# --------------------------------------------------------------------------- #
+def _refresh_telegram(source: dict, cutoff: str) -> None:
+    """Подтянуть свежие посты Telegram-канала до даты ``cutoff`` (включительно)."""
+    channelname = source["name"]
+    before = None
+    for _ in range(10):
+        if before is not None:
+            oldest = get_oldest_post_date(source["id"])
+            if oldest and oldest < cutoff:
+                break
+        try:
+            html = fetch_page(channelname, before)
+        except Exception:
+            break
+        posts = parse_posts(html)
+        if not posts:
+            break
+        save_posts(source["id"], posts)
+        if posts[-1]["date"] and posts[-1]["date"] < cutoff:
+            break
+        before = posts[-1]["ext_id"]
+
+
+def _refresh_rss(source: dict) -> None:
+    """Подтянуть посты из RSS/RSSHub-ленты источника."""
+    try:
+        content = fetch_feed(source["url"])
+    except Exception:
+        return
+    posts = parse_feed(content)
+    save_posts(source["id"], posts)
+
+
 async def api_refresh_posts(request: Request) -> JSONResponse:
+    """POST /api/refresh/posts — подтянуть свежие посты за последние N суток.
+
+    Тело: {"days": 1, "kind": ""|"telegram"|"rss"}. По умолчанию days=1 (сутки).
+    """
     async def _fetch(source: dict) -> None:
         if source["kind"] == "telegram":
             _refresh_telegram(source, cut_off_str)
@@ -120,13 +162,23 @@ async def api_refresh_posts(request: Request) -> JSONResponse:
             return JSONResponse({"error": "Метод не поддерживается"}, status_code=405)
         data = await request.json()
         only_kind = (data.get("kind") or "").strip()
+        try:
+            days = int(data.get("days", 1))
+        except (TypeError, ValueError):
+            days = 1
+        days = max(1, min(days, 30))
+        cut_off_str = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
+            "%Y-%m-%d"
+        )
         sources = (
             list_sources_with_id(only_kind)
             if only_kind
             else list_sources_with_id()
         )
         if not sources:
-            return JSONResponse({"ok": True, "fetched": 0})
+            return JSONResponse(
+                {"ok": True, "fetched": 0, "failed": 0, "message": "Нет подписок для обновления"}
+            )
 
         ok, failed = 0, 0
         for src in sources:
@@ -136,7 +188,9 @@ async def api_refresh_posts(request: Request) -> JSONResponse:
                 failed += 1
                 continue
             ok += 1
-        return JSONResponse({"ok": True, "fetched": ok, "failed": failed})
+        return JSONResponse(
+            {"ok": True, "fetched": ok, "failed": failed, "days": days, "cutoff": cut_off_str}
+        )
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
