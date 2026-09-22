@@ -12,7 +12,6 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from db import (
     add_source,
-    remove_source,
     list_sources,
     list_sources_with_id,
     get_source,
@@ -155,7 +154,6 @@ def register_ui(mcp):
     mcp.custom_route("/", methods=["GET"])(lambda request: RedirectResponse("/ui"))
     mcp.custom_route("/ui", methods=["GET"])(ui_index)
     mcp.custom_route("/api/sources", methods=["GET", "POST"])(api_sources)
-    mcp.custom_route("/api/sources/{name:path}", methods=["DELETE"])(api_source)
     mcp.custom_route("/api/posts", methods=["GET"])(api_posts)
     mcp.custom_route("/api/refresh/posts", methods=["POST"])(api_refresh_posts)
     mcp.custom_route("/api/rsshub", methods=["GET"])(api_rsshub)
