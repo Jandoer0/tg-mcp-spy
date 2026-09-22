@@ -68,11 +68,14 @@ async def api_sources(request: Request) -> JSONResponse:
 
 async def api_posts(request: Request) -> JSONResponse:
     name = request.query_params.get("source", "").strip().lower().lstrip("@")
+    kind = request.query_params.get("kind", "").strip().lower()
+    if kind not in ("telegram", "rss"):
+        kind = ""
     try:
-        limit = int(request.query_params.get("limit", "50"))
+        limit = int(request.query_params.get("limit", "300"))
     except ValueError:
-        limit = 50
-    limit = max(1, min(limit, 200))
+        limit = 300
+    limit = max(1, min(limit, 1000))
 
     if name:
         # Посты конкретной подписки
@@ -86,19 +89,24 @@ async def api_posts(request: Request) -> JSONResponse:
                 "kind": src["kind"],
                 "global": False,
                 "posts": [
-                    {"date": p["date"], "text": p["text"], "url": p["url"]}
+                    {"id": p["id"], "date": p["date"], "text": p["text"], "url": p["url"]}
                     for p in rows
                 ],
             }
         )
 
-    # Без source — последние посты по всем подпискам (главный экран)
-    rows = get_posts([s["id"] for s in list_sources()], "1970-01-01")[:limit]
+    # Без source — лента по всем подпискам (главный экран).
+    # Опционально фильтруем по типу источника (telegram/rss), чтобы
+    # показывать «несколько дней» накопленных постов из кеша.
+    srcs = list_sources(kind) if kind else list_sources()
+    rows = get_posts([s["id"] for s in srcs], "1970-01-01")[:limit]
     return JSONResponse(
         {
             "global": True,
+            "kind": kind,
             "posts": [
                 {
+                    "id": p["id"],
                     "date": p["date"],
                     "text": p["text"],
                     "url": p["url"],

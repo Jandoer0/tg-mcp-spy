@@ -80,7 +80,15 @@
     .badge.telegram { background: rgba(41,169,232,.16); color: var(--tg); }
     .badge.rss { background: rgba(255,138,76,.16); color: var(--rss); }
 
-    .posts { display: grid; gap: 10px; max-height: 72vh; overflow: auto; padding-right: 2px; }
+    .feed-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .chip { background: #12151c; border: 1px solid var(--line); color: var(--muted);
+      padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: .15s; box-shadow: none; }
+    .chip:hover { color: var(--text); border-color: var(--muted); }
+    .chip.active { color: #fff; background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-color: transparent; box-shadow: 0 2px 10px rgba(91,155,255,.30); }
+
+    .posts { display: grid; gap: 10px; }
     .post { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
       background: #14171e; transition: .15s; }
     .post:hover { border-color: #39424f; }
@@ -118,6 +126,11 @@
     <section id="tab-posts" class="tab-panel">
       <div class="card">
         <h2>Последние посты <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button></h2>
+        <div class="feed-filters">
+          <button class="chip active" data-kind="">Все</button>
+          <button class="chip" data-kind="telegram">Telegram</button>
+          <button class="chip" data-kind="rss">RSS</button>
+        </div>
         <div id="posts" class="posts">Загрузка…</div>
       </div>
     </section>
@@ -264,29 +277,76 @@
 
     // ----- Посты (вкладка "Последние посты") -----
     let currentSource = ""; // "" = все подписки
+    let currentKind = "";   // "" = все типы, "telegram" / "rss"
+
+    // Один пост (с data-id для дедупликации при добавлении сверху)
+    function buildPostEl(p) {
+      const el = document.createElement("div");
+      el.className = "post";
+      if (p.id != null) el.dataset.id = String(p.id);
+      const url = p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">открыть</a>` : "";
+      const srcTag = p.source ? `<span class="srcname">@${escapeHtml(p.source)}</span> · ` : "";
+      const kindTag = p.kind ? `<span class="badge ${escapeHtml(p.kind)}">${escapeHtml(p.kind)}</span> ` : "";
+      el.innerHTML = `<div class="posthead">${kindTag}${srcTag}${escapeHtml(p.date || "—")} · ${url}</div><div class="text">${renderBody(p.text)}</div>`;
+      return el;
+    }
+
+    function syncChips() {
+      document.querySelectorAll(".chip").forEach((c) =>
+        c.classList.toggle("active", (c.dataset.kind || "") === currentKind)
+      );
+    }
+
     async function loadPosts(name) {
-      if (typeof name === "string") currentSource = name;
+      if (typeof name === "string") { currentSource = name; currentKind = ""; syncChips(); }
       const box = $("#posts");
       box.innerHTML = "Загрузка…";
-      const path = currentSource
-        ? `/api/posts?source=${encodeURIComponent(currentSource)}`
-        : "/api/posts";
+      let path;
+      if (currentSource) {
+        path = `/api/posts?source=${encodeURIComponent(currentSource)}`;
+      } else if (currentKind) {
+        path = `/api/posts?kind=${encodeURIComponent(currentKind)}`;
+      } else {
+        path = "/api/posts";
+      }
       try {
         const data = await api(path);
         if (!data.posts.length) {
-          box.innerHTML = '<div class="empty">Постов пока нет. Запросите их через MCP-инструмент query_posts.</div>';
+          box.innerHTML = '<div class="empty">Постов пока нет. Нажмите «Свежие за 24ч», чтобы подтянуть новости.</div>';
           return;
         }
         box.innerHTML = "";
-        for (const p of data.posts) {
-          const el = document.createElement("div");
-          el.className = "post";
-          const url = p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">открыть</a>` : "";
-          const srcTag = p.source ? `<span class="srcname">@${escapeHtml(p.source)}</span> · ` : "";
-          el.innerHTML = `<div class="posthead">${srcTag}${escapeHtml(p.date || "—")} · ${url}</div><div class="text">${renderBody(p.text)}</div>`;
-          box.appendChild(el);
-        }
+        const frag = document.createDocumentFragment();
+        for (const p of data.posts) frag.appendChild(buildPostEl(p));
+        box.appendChild(frag);
       } catch (e) { box.innerHTML = `<div class="empty">${e.message}</div>`; }
+    }
+
+    // Добавить свежие посты (последние сутки) строго сверху ленты,
+    // не перерисовывая уже загруженные (за несколько дней) посты.
+    async function prependFresh() {
+      const box = $("#posts");
+      let path;
+      if (currentSource) {
+        path = `/api/posts?source=${encodeURIComponent(currentSource)}`;
+      } else if (currentKind) {
+        path = `/api/posts?kind=${encodeURIComponent(currentKind)}`;
+      } else {
+        path = "/api/posts";
+      }
+      const data = await api(path);
+      const existing = new Set(
+        [...box.querySelectorAll(".post")].map((el) => el.dataset.id)
+      );
+      const fresh = data.posts.filter((p) => p.id != null && !existing.has(String(p.id)));
+      if (!fresh.length) return 0;
+      // fresh идут по убыванию даты (новые сверху) — вставляем блоком в начало.
+      const frag = document.createDocumentFragment();
+      for (const p of fresh) frag.appendChild(buildPostEl(p));
+      box.insertBefore(frag, box.firstChild);
+      const empty = box.querySelector(".empty");
+      if (empty) empty.remove();
+      return fresh.length;
     }
 
     // ----- Формы добавления -----
@@ -304,8 +364,9 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ days: 1 }),
         });
-        toast(`Подтянуто: ${r.fetched ?? 0} источников (ошибок: ${r.failed ?? 0})`);
-        loadPosts();
+        const added = await prependFresh();
+        const extra = added ? `, добавлено ${added} новых сверху` : "";
+        toast(`Подтянуто: ${r.fetched ?? 0} источников (ошибок: ${r.failed ?? 0})${extra}`);
       } catch (e) {
         toast(e.message, true);
       } finally {
@@ -313,6 +374,16 @@
         btn.textContent = label;
       }
     });
+
+    // Фильтры по типу источника (Все / Telegram / RSS)
+    document.querySelectorAll(".chip").forEach((c) =>
+      c.addEventListener("click", () => {
+        currentKind = c.dataset.kind || "";
+        currentSource = "";
+        syncChips();
+        loadPosts();
+      })
+    );
     $("#form-tg").addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = e.target.name.value.trim();
