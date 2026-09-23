@@ -1,0 +1,16 @@
+# Локальный запуск через podman compose (порт 8090).
+# Сборка образа из исходников прямо на этом хосте (запасной вариант).
+services:
+  tg-mcp-spy:
+    build: .
+    image: tg-mcp-spy:local
+    container_name: tg-mcp-spy
+    ports:
+      - "8090:8000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      DB_PATH: /app/data/telegram_cache.db
+      RSSHUB_BASE_URL: https://rsshub.app
+    volumes:
+      - ./data:/app/data:Z

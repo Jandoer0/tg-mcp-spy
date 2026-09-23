@@ -41,3 +41,9 @@ Screenshot*
 #  - data-8090/ — volume с БД ( telegram_cache.db ), живёт на хосте.
 restart.sh
 data-8090/
+
+# Кэши инструментов разработки
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/

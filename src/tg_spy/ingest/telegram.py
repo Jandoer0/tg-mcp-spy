@@ -1,7 +1,10 @@
 """Парсинг постов Telegram-каналов через публичный виджет t.me/s/<канал>."""
+from __future__ import annotations
+
+from typing import Optional
+
 import httpx
 from bs4 import BeautifulSoup
-from typing import Optional
 
 BASE_URL = "https://t.me/s"
 
@@ -23,27 +26,15 @@ def _extract_message_text(node) -> str:
     Сохраняет пробелы между словами (в т.ч. вокруг ссылок, хештегов,
     упоминаний), переводит ``<br>`` и абзацы ``<p>`` в переносы строк и
     убирает служебную HTML-разметку.
-
-    Раньше использовался ``get_text(strip=True)``, который срезает каждый
-    фрагмент текста по отдельности — пробел между соседними элементами
-    (например, ``<a>слово</a> <a>#хештег</a>``) превращается в ``""`` и
-    слова «склеиваются» (``слово#хештег``). Здесь берём текст без
-    срезания и лишь нормализуем пробелы построчно.
     """
     if node is None:
         return ""
-    # <br> → перевод строки
     for br in node.find_all("br"):
         br.replace_with("\n")
-    # после каждого абзаца — перевод строки
     for p in node.find_all("p"):
         p.insert_after("\n")
-    # get_text без strip сохраняет пробелы между элементами
     raw = node.get_text(separator="")
-    # неразрывные пробелы → обычные
     raw = raw.replace("\u00a0", " ")
-    # внутри каждой строки схлопываем повторяющиеся пробелы,
-    # межстрочные переносы сохраняем
     lines = [" ".join(line.split()) for line in raw.split("\n")]
     return "\n".join(lines).strip()
 

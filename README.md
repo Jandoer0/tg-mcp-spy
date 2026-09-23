@@ -10,6 +10,28 @@ MCP-сервер для отслеживания **Telegram-каналов** и 
 - запуск в контейнере через `podman compose` (порт 8090);
 - нативная работа с агентами **Hermes** и **pi.dev** (конфиг в `.mcp.json`).
 
+## Архитектура (кратко)
+
+Проект — это платформа агрегации лент с тремя фронтендами над одним
+доменным ядром: **MCP-сервер** (для агентов Hermes/pi.dev), **веб-интерфейс**
+и **локальный ИИ-агент** «Мои темы». Детали — в [ARCHITECTURE.md](ARCHITECTURE.md).
+
+```
+src/tg_spy/
+├─ config.py      # pydantic-конфиг (провайдер/модель/расписание)
+├─ db/            # SQLite: connection(миграции) + repositories
+├─ ingest/        # парсеры Telegram/RSS и пересборка лент
+├─ topics/        # ИИ-агент, «движок» хронологии, сервис-оркестрация
+├─ mcp/           # адаптер MCP (инструменты/ресурсы/промпты)
+├─ api/           # адаптер веб (Starlette-роуты + статика)
+├─ scheduler/     # планировщик (APScheduler + пул потоков агента)
+├─ web/static/    # фронтенд (ES-модули, без сборки)
+└─ cli.py         # tg-spy serve | worker | migrate
+```
+
+MCP-сервер — корневое ASGI-приложение (отдаёт `/mcp`), веб-маршруты и статика
+добавляются через `mcp.custom_route`; всё на одном порту.
+
 ## Быстрый старт
 
 ```bash
@@ -27,6 +49,17 @@ podman compose up -d     # запустить в фоне, веб на http://lo
 | `podman compose down && podman compose up -d` | перезапустить (при правках кода) |
 | `podman compose logs -f` | показывать логи |
 | `podman compose ps` | статус контейнера |
+
+Локально без контейнера (Python ≥ 3.12, зависимости из `pyproject.toml`):
+
+```bash
+python -m tg_spy --help          # справка по командам
+python -m tg_spy serve --reload  # веб + API + MCP, автоперезагрузка кода
+python -m tg_spy worker          # только фоновый планировщик + агент
+python -m tg_spy migrate          # применить миграции БД
+```
+
+Тесты: `pip install -e . && pytest`. Подробнее — в [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Второй независимый экземпляр на другом порту:
 

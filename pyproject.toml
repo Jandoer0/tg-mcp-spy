@@ -1,7 +1,7 @@
 [project]
 name = "tg-mcp-spy"
-version = "0.2.0"
-description = "MCP-сервер для отслеживания Telegram-каналов и RSS/RSSHub лент с веб-интерфейсом"
+version = "0.3.0"
+description = "Агрегатор Telegram/RSS-лент с локальным ИИ-агентом и веб-интерфейсом"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,8 +12,34 @@ dependencies = [
     "feedparser>=6.0",
     "starlette>=0.37",
     "uvicorn>=0.30",
+    "pydantic>=2.7",
+    "apscheduler>=3.10",
 ]
+
+[project.scripts]
+tg-spy = "tg_spy.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501", "B008"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

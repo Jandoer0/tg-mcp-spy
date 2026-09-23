@@ -3,15 +3,15 @@
 RSSHub — это сервис, который умеет отдавать RSS для сайтов, у которых нет
 родной ленты. Например, для Telegram-канала:
     https://rsshub.app/telegram/channel/durov
-
-Мы просто скачиваем URL и парсим стандартный RSS/Atom.
 """
+from __future__ import annotations
+
 import time
 from datetime import datetime, timezone
 from typing import Optional
 
-import httpx
 import feedparser
+import httpx
 from bs4 import BeautifulSoup
 
 DEFAULT_RSSHUB = "https://rsshub.app"
@@ -39,19 +39,11 @@ def _parse_date(entry: dict) -> str:
         val = entry.get(key)
         if isinstance(val, time.struct_time):
             return datetime(*val[:6], tzinfo=timezone.utc).strftime("%Y-%m-%d")
-    # Если не распарсили — вернём пусто (пост уйдёт в конец выдачи)
     return ""
 
 
 def _html_to_text(html: str) -> str:
-    """Превратить HTML-содержимое RSS/Atom в чистый текст.
-
-    Убирает теги разметки (``<p>``, ``<a>``, ``<code>``, ``<br>`` и т.п.),
-    декодирует HTML-сущности (``&amp;`` → ``&``, ``&lt;`` → ``<``) и
-    переводит переносы строк. Раньше сырой HTML из ``summary`` попадал в
-    текст поста целиком, из-за чего в выдаче MCP/агента и веб-интерфейса
-    были видны теги и служебные символы разметки/кода.
-    """
+    """Превратить HTML-содержимое RSS/Atom в чистый текст."""
     if not html:
         return ""
     soup = BeautifulSoup(html, "lxml")

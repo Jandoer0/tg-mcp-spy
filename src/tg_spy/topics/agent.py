@@ -3,65 +3,61 @@
 Использует слабую локальную модель через OpenAI-совместимый эндпоинт
 (по умолчанию Ollama). Задача модели — по теме (тегу) отобрать из общей
 ленты посты, относящиеся к теме, и «скопировать» их в хронологию темы.
-Без аналитики: модель только помечает релевантные посты (mode='tag'),
+Без аналитики: модель только помечает релевантные посты (mode='ai'),
 «движок» сайта сам собирает отобранные посты в отслеживаемую тему.
 """
+from __future__ import annotations
+
 import json
 import logging
 import os
 import re
 import threading
 import time
+from typing import Optional
 
 import httpx
 
-from config import load_config, get_provider
-from db import (
+from ..config import get_provider, load_config
+from ..db import (
+    get_excluded_ids,
+    get_posts_after,
+    get_tagged_total,
     get_topic,
     get_topic_by_id,
-    get_posts_after,
-    get_excluded_ids,
     tag_post,
     update_topic_run,
-    get_tagged_total,
 )
 
 logger = logging.getLogger(__name__)
 
-# Сколько постов за один вызов модели. Меньше — короче запрос, быстрее
-# ответ и надёжнее JSON (слабые модели вроде qwen3:4b на больших пакетах
-# «уезжают» в рассуждения и перестают возвращать JSON).
+# Сколько постов за один вызов модели.
 AGENT_BATCH = int(os.environ.get("AGENT_BATCH", "10"))
 # Максимальная длина текста поста, передаваемая модели.
-# Ограничено, чтобы пакет постов влезал в контекст модели (у базовой
-# ornith-1.5:9b всего 4096 токенов — отсюда 400 символов на пост).
 POST_EXCERPT_CHARS = int(os.environ.get("AGENT_EXCERPT_CHARS", "400"))
-# Максимальная длина описания темы в промпте (чтобы не раздувать контекст).
+# Максимальная длина описания темы в промпте.
 TAG_DESCRIPTION_CHARS = int(os.environ.get("AGENT_DESCRIPTION_CHARS", "280"))
-# Сколько пачек обработать за один прогон (защита от слишком долгой работы).
+# Сколько пачек обработать за один прогон.
 AGENT_MAX_BATCHES = int(os.environ.get("AGENT_MAX_BATCHES", "20"))
-# Число повторных попыток обращения к (слабой) модели при сбоях сети/таймаутах.
+# Число повторных попыток обращения к модели при сбоях.
 AGENT_RETRIES = int(os.environ.get("AGENT_RETRIES", "2"))
-# Пауза между попытками (сек), растёт линейно (1x, 2x, ...).
+# Пауза между попытками (сек), растёт линейно.
 AGENT_RETRY_BACKOFF = float(os.environ.get("AGENT_RETRY_BACKOFF", "1.5"))
-# Таймаут одного запроса к модели (сек) — чтобы Ollama не блокировал интерфейс.
-# Для рассуждающих/слабых моделей на больших пакетах стоит больше.
+# Таймаут одного запроса к модели (сек).
 AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 
 
-def _chat(messages: list[dict], temperature: float = 0.0) -> str | None:
-    """Один вызов OpenAI-совместимого chat/completions. Возвращает текст ответа."""
+def _chat(messages: list[dict], temperature: float = 0.0) -> Optional[str]:
+    """Один вызов OpenAI-совместимого chat/completions. Возвращает текст."""
     cfg = load_config()
     prov = get_provider(cfg)
-    base = (prov.get("baseUrl") or "http://127.0.0.1:11434/v1").rstrip("/")
+    base = (prov.base_url or "http://127.0.0.1:11434/v1").rstrip("/")
     url = f"{base}/chat/completions"
-    model = cfg.get("model") or "llama3.2"
-    api_key = prov.get("apiKey") or "ollama"
-    compat = prov.get("compat") or {}
+    model = cfg.model or "llama3.2"
+    api_key = prov.api_key or "ollama"
+    compat = prov.compat
 
-    # Роль системного сообщения: слабые модели/прокси не всегда поддерживают
-    # developer-роль — по умолчанию используем system.
-    sys_role = "developer" if compat.get("supportsDeveloperRole") else "system"
+    sys_role = "developer" if compat.supports_developer_role else "system"
     msgs = []
     for m in messages:
         if m.get("role") == "system":
@@ -73,26 +69,19 @@ def _chat(messages: list[dict], temperature: float = 0.0) -> str | None:
         "model": model,
         "messages": msgs,
         "temperature": temperature,
-        # Явно нестриминговый ответ — иначе httpx может ждать тела потока.
         "stream": False,
     }
-    # Отключить рассуждения (CoT) для моделей вроде Qwen3 — иначе они
-    # «думают» десятки секунд даже на простом фильтре и не укладываются
-    # в таймаут. Параметр специфичен для Ollama.
-    if compat.get("disableThinking"):
+    if compat.disable_thinking:
         payload["think"] = False
-    # Ollama умеет форсировать JSON-ответ через format (для надёжности).
-    if compat.get("jsonObjectFormat"):
+    if compat.json_object_format:
         payload["format"] = {"type": "json_object"}
 
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    # Повторные попытки: слабая локальная модель или Ollama могут
-    # зависать/падать — не блокируем интерфейс, пробуем ещё раз с паузой.
     attempts = max(0, AGENT_RETRIES) + 1
-    last_err: Exception | None = None
+    last_err: Optional[Exception] = None
     for attempt in range(attempts):
         try:
             resp = httpx.post(
@@ -109,13 +98,11 @@ def _chat(messages: list[dict], temperature: float = 0.0) -> str | None:
             )
             if attempt < attempts - 1:
                 time.sleep(AGENT_RETRY_BACKOFF * (attempt + 1))
-    logger.error(
-        "Модель недоступна после %d попыток (%s): %s", attempts, url, last_err
-    )
+    logger.error("Модель недоступна после %d попыток (%s): %s", attempts, url, last_err)
     return None
 
 
-def _extract_json(text: str) -> dict | None:
+def _extract_json(text: str) -> Optional[dict]:
     """Извлечь JSON-объект из ответа модели (с учётом markdown-обёрток)."""
     if not text:
         return None
@@ -144,8 +131,6 @@ def _build_messages(topic: dict, posts: list[dict]) -> list[dict]:
         if len(text) > POST_EXCERPT_CHARS:
             text = text[:POST_EXCERPT_CHARS] + "…"
         lines.append(f"{i}. [{p.get('date', '')}] {p.get('source', '')}: {text}")
-    # Описание помогает модели не отбирать всё подряд: например, тег
-    # «Мобилизация» + описание «ресурсы организма человека» → только про здоровье.
     desc_block = ""
     if description:
         desc_block = (
@@ -158,8 +143,7 @@ def _build_messages(topic: dict, posts: list[dict]) -> list[dict]:
         f"{desc_block}"
         f"Ниже посты из общей новостной ленты. Для каждого поста определи, "
         f"относится ли он к теме «{tag}» с учётом описания выше "
-        f"(прямо упоминается или речь идёт об этом "
-        f"же предмете/событии/теме).\n\n"
+        f"(прямо упоминается или речь идёт об этом же предмете/событии/теме).\n\n"
         f"ВАЖНО: выведи ТОЛЬКО одну строку — JSON-объект, без какого-либо "
         f"другого текста, без рассуждений и без markdown. Никаких пояснений. "
         f"Только JSON строго в формате:\n"
@@ -170,17 +154,15 @@ def _build_messages(topic: dict, posts: list[dict]) -> list[dict]:
         f"Посты:\n" + "\n".join(lines)
     )
     return [
-        {"role": "system", "content": cfg.get("systemPrompt", "")},
+        {"role": "system", "content": cfg.system_prompt},
         {"role": "user", "content": user},
     ]
 
 
-def match_topic_posts(topic: dict, posts: list[dict], content: str | None = None) -> list[int]:
-    """Вернуть 1-based индексы постов, относящихся к теме.
-
-    content — уже полученный от модели ответ (чтобы не дёргать модель
-    повторно). Если None — дёрнуть модель самостоятельно.
-    """
+def match_topic_posts(
+    topic: dict, posts: list[dict], content: Optional[str] = None
+) -> list[int]:
+    """Вернуть 1-based индексы постов, относящихся к теме."""
     if not posts:
         return []
     if content is None:
@@ -205,15 +187,15 @@ def match_topic_posts(topic: dict, posts: list[dict], content: str | None = None
 
 
 def run_topic_agent(
-    topic: dict | None = None,
-    topic_id: int | None = None,
-    topic_name: str | None = None,
+    topic: Optional[dict] = None,
+    topic_id: Optional[int] = None,
+    topic_name: Optional[str] = None,
     max_batches: int = AGENT_MAX_BATCHES,
 ) -> dict:
     """Один прогон агента для темы.
 
     Сканирует новые посты (id > last_post_id) пачками, просит модель
-    отметить релевантные и копирует их в хронологию темы (mode='tag').
+    отметить релевантные и копирует их в хронологию темы (mode='ai').
     Возвращает сводку: {"topic", "scanned", "added", "total", "error"}.
     """
     if topic is None:
@@ -237,7 +219,6 @@ def run_topic_agent(
         if not candidates:
             break
         scanned_total += len(candidates)
-        # Один вызов модели на пачку. При таймауте/ошибке content будет None.
         try:
             content = _chat(_build_messages(topic, candidates))
         except Exception as e:
@@ -245,19 +226,15 @@ def run_topic_agent(
             logger.error("Ошибка модели для темы %s: %s", topic.get("name"), e)
             content = None
         if content is None:
-            # Нет ответа модели — НЕ сдвигаем high-water mark, чтобы эту пачку
-            # можно было повторить в следующем прогоне (иначе посты потеряются).
+            # Нет ответа модели — НЕ сдвигаем high-water mark, чтобы эту
+            # пачку можно было повторить в следующем прогоне.
             logger.warning(
                 "Агент по теме %s: нет ответа модели, пачка пропущена (повтор при следующем запуске)",
                 topic.get("name"),
             )
             break
         matched_idx = match_topic_posts(topic, candidates, content)
-        # Пропускаем посты, которые пользователь вручно исключил из темы:
-        # агент не должен возвращать их обратно без явного сброса.
         excluded = get_excluded_ids(topic["id"], [p["id"] for p in candidates])
-        # Модель *присваивает тег* релевантным постам (mode='ai'); само
-        # копирование в хронологию темы выполняет «движок» (get_tagged_posts).
         for idx in matched_idx:
             post = candidates[idx - 1]
             if post["id"] in excluded:
@@ -265,7 +242,6 @@ def run_topic_agent(
             row = tag_post(topic["id"], post["id"], mode="ai")
             if row:
                 added_total += 1
-        # продвигаем high-water mark до максимального id из пачки
         last_post_id = max(p["id"] for p in candidates)
         update_topic_run(topic["id"], last_post_id=last_post_id)
         batches += 1
@@ -280,30 +256,28 @@ def run_topic_agent(
     }
 
 
-def run_topic_agent_async(topic_id: int | None = None, topic_name: str | None = None):
+def run_topic_agent_async(
+    topic_id: Optional[int] = None, topic_name: Optional[str] = None
+) -> None:
     """Запустить прогон агента в фоновом потоке (не блокирует ответ HTTP)."""
 
-    def _t():
+    def _t() -> None:
         try:
             run_topic_agent(topic_id=topic_id, topic_name=topic_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Фоновый прогон агента упал: %s", e)
 
     threading.Thread(target=_t, name="topic-agent", daemon=True).start()
 
 
 def test_connection() -> dict:
-    """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»).
-
-    Делает один минимальный запрос к модели и возвращает {"ok", "reply"} или
-    {"ok": False, "error"}. Не меняет данные.
-    """
+    """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»)."""
     cfg = load_config()
-    model = cfg.get("model") or "llama3.2"
+    model = cfg.model or "llama3.2"
     try:
         content = _chat(
             [
-                {"role": "system", "content": cfg.get("systemPrompt", "")},
+                {"role": "system", "content": cfg.system_prompt},
                 {
                     "role": "user",
                     "content": "Кратко подтверди, что ты на связи, одним-двумя словами.",
@@ -318,5 +292,5 @@ def test_connection() -> dict:
                 "error": "Модель не вернула ответ (нет соединения / таймаут / ошибка провайдера)",
             }
         return {"ok": True, "model": model, "reply": (content or "").strip()[:200]}
-    except Exception as e:  # если _chat не перехватил
+    except Exception as e:  # noqa: BLE001
         return {"ok": False, "model": model, "error": str(e)}
