@@ -17,7 +17,7 @@ CONFIG_PATH = os.environ.get("AGENT_CONFIG", str(Path(__file__).parent / "config
 # Дефолтный конфиг провайдера (Ollama, локальная слабая модель).
 DEFAULT_CONFIG = {
     "provider": "ollama",
-    "model": "qwen3.5:9b-128k",
+    "model": "ornith-1.5:9b",
     "systemPrompt": (
         "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли "
         "каждый пост из списка к заданной теме. Отвечай только JSON, "
@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
                 # Отключает рассуждения (CoT) для моделей вроде Qwen3 —
                 # иначе они «думают» десятки секунд. Включается в config.json
                 # под конкретную модель; здесь по умолчанию выключено.
-                "disableThinking": False,
+                "disableThinking": False,  # ornith-1.5 — не рассуждающая модель
             },
         }
     },
