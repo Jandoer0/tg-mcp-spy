@@ -172,7 +172,7 @@ mcp_servers:
 ```json
 {
   "provider": "ollama",
-  "model": "ornith-1.5:9b",
+  "model": "ornith-1.5:9b-128k",
   "schedule": { "enabled": true, "feedRefreshMinutes": 60, "topicMinutes": 1440 },
   "providers": {
     "ollama": {

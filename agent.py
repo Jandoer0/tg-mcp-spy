@@ -32,7 +32,9 @@ logger = logging.getLogger(__name__)
 # вылететь по таймауту на слабой модели (для Qwen3:9b большой пакет >120с).
 AGENT_BATCH = int(os.environ.get("AGENT_BATCH", "30"))
 # Максимальная длина текста поста, передаваемая модели.
-POST_EXCERPT_CHARS = int(os.environ.get("AGENT_EXCERPT_CHARS", "600"))
+# Ограничено, чтобы пакет постов влезал в контекст модели (у базовой
+# ornith-1.5:9b всего 4096 токенов — отсюда 400 символов на пост).
+POST_EXCERPT_CHARS = int(os.environ.get("AGENT_EXCERPT_CHARS", "400"))
 # Максимальная длина описания темы в промпте (чтобы не раздувать контекст).
 TAG_DESCRIPTION_CHARS = int(os.environ.get("AGENT_DESCRIPTION_CHARS", "280"))
 # Сколько пачек обработать за один прогон (защита от слишком долгой работы).
