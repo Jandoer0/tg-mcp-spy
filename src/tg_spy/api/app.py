@@ -17,6 +17,7 @@ from .web import (
     api_config_models,
     api_config_test,
     api_posts,
+    api_posts_tags,
     api_rsshub,
     api_refresh_posts,
     api_source_delete,
