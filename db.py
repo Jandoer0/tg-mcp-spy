@@ -580,8 +580,8 @@ def get_posts_by_tag(tag: str, limit: int = 300) -> list[dict]:
     """
     conn = get_conn()
     rows = conn.execute(
-        """SELECT p.id AS id, p.source_id, p.ext_id, s.name AS source, p.text,
-                  p.date, p.url, pt.mode
+        """SELECT p.id AS id, p.source_id, p.ext_id, s.name AS source,
+                  s.kind AS kind, p.text, p.date, p.url, pt.mode
            FROM posts_tags pt
            JOIN posts p ON p.id = pt.post_id
            JOIN sources s ON s.id = p.source_id
