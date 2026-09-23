@@ -1,21 +1,22 @@
 {
   "provider": "ollama",
-  "model": "llama3.2",
+  "model": "qwen3.5:9b-128k",
   "systemPrompt": "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли каждый пост из списка к заданной теме. Отвечай только JSON, без пояснений и аналитики.",
   "schedule": {
     "enabled": true,
     "feedRefreshMinutes": 60,
-    "topicMinutes": 30
+    "topicMinutes": 1440
   },
   "providers": {
     "ollama": {
-      "baseUrl": "http://127.0.0.1:11434/v1",
+      "baseUrl": "http://host.containers.internal:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
-        "jsonObjectFormat": true
+        "jsonObjectFormat": true,
+        "disableThinking": true
       }
     }
   }

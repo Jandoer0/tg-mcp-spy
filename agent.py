@@ -68,7 +68,14 @@ def _chat(messages: list[dict], temperature: float = 0.0) -> str | None:
         "model": model,
         "messages": msgs,
         "temperature": temperature,
+        # Явно нестриминговый ответ — иначе httpx может ждать тела потока.
+        "stream": False,
     }
+    # Отключить рассуждения (CoT) для моделей вроде Qwen3 — иначе они
+    # «думают» десятки секунд даже на простом фильтре и не укладываются
+    # в таймаут. Параметр специфичен для Ollama.
+    if compat.get("disableThinking"):
+        payload["think"] = False
     # Ollama умеет форсировать JSON-ответ через format (для надёжности).
     if compat.get("jsonObjectFormat"):
         payload["format"] = {"type": "json_object"}
@@ -260,3 +267,33 @@ def run_topic_agent_async(topic_id: int | None = None, topic_name: str | None = 
             logger.error("Фоновый прогон агента упал: %s", e)
 
     threading.Thread(target=_t, name="topic-agent", daemon=True).start()
+
+
+def test_connection() -> dict:
+    """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»).
+
+    Делает один минимальный запрос к модели и возвращает {"ok", "reply"} или
+    {"ok": False, "error"}. Не меняет данные.
+    """
+    cfg = load_config()
+    model = cfg.get("model") or "llama3.2"
+    try:
+        content = _chat(
+            [
+                {"role": "system", "content": cfg.get("systemPrompt", "")},
+                {
+                    "role": "user",
+                    "content": "Кратко подтверди, что ты на связи, одним-двумя словами.",
+                },
+            ],
+            temperature=0.0,
+        )
+        if content is None:
+            return {
+                "ok": False,
+                "model": model,
+                "error": "Модель не вернула ответ (нет соединения / таймаут / ошибка провайдера)",
+            }
+        return {"ok": True, "model": model, "reply": (content or "").strip()[:200]}
+    except Exception as e:  # если _chat не перехватил
+        return {"ok": False, "model": model, "error": str(e)}

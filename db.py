@@ -315,7 +315,7 @@ def get_posts_after(post_id: int, limit: int = 60) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def add_topic(name: str, tag: str, schedule_minutes: int = 30, description: str = "") -> dict:
+def add_topic(name: str, tag: str, schedule_minutes: int = 1440, description: str = "") -> dict:
     """Создать (или обновить) отслеживаемую тему.
 
     ``description`` — краткое пояснение, что именно имеет в виду пользователь
@@ -570,3 +570,25 @@ def get_tagged_total(topic_id: int) -> int:
     ).fetchone()
     conn.close()
     return int(row[0]) if row else 0
+
+
+def get_posts_by_tag(tag: str, limit: int = 300) -> list[dict]:
+    """Посты глобальной ленты, отмеченные тегом темы (фильтр по тегам).
+
+    Используется выпадающим меню тегов во вкладке «Лента новостей»: показываем
+    только те посты общей ленты, которым присвоен тег выбранной темы.
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT p.id AS id, p.source_id, p.ext_id, s.name AS source, p.text,
+                  p.date, p.url, pt.mode
+           FROM posts_tags pt
+           JOIN posts p ON p.id = pt.post_id
+           JOIN sources s ON s.id = p.source_id
+           JOIN topics t ON t.id = pt.topic_id
+           WHERE t.tag = ?
+           ORDER BY p.date DESC, p.id DESC LIMIT ?""",
+        (tag, int(limit)),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

@@ -10,6 +10,8 @@ from datetime import datetime, timezone, timedelta
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from config import load_config, get_provider, save_config, get_config_path
+
 from db import (
     add_source,
     list_sources,
@@ -28,11 +30,12 @@ from db import (
     reset_exclusions,
     get_tagged_posts,
     get_tagged_total,
+    get_posts_by_tag,
     set_topic_active,
 )
 from tg_parser import fetch_page, parse_posts
 from rss_parser import fetch_feed, parse_feed, rsshub_telegram_url, DEFAULT_RSSHUB
-from agent import run_topic_agent, run_topic_agent_async
+from agent import run_topic_agent, run_topic_agent_async, test_connection
 
 UI_DIR = Path(__file__).parent / "ui"
 
@@ -81,6 +84,7 @@ async def api_sources(request: Request) -> JSONResponse:
 async def api_posts(request: Request) -> JSONResponse:
     name = request.query_params.get("source", "").strip().lower().lstrip("@")
     kind = request.query_params.get("kind", "").strip().lower()
+    tag = request.query_params.get("tag", "").strip()
     if kind not in ("telegram", "rss"):
         kind = ""
     try:
@@ -88,6 +92,28 @@ async def api_posts(request: Request) -> JSONResponse:
     except ValueError:
         limit = 300
     limit = max(1, min(limit, 1000))
+
+    if tag:
+        # Фильтр по тегу (выпадающее меню во вкладке «Лента новостей»):
+        # только посты общей ленты, отмеченные тегом выбранной темы.
+        rows = get_posts_by_tag(tag, limit)
+        return JSONResponse(
+            {
+                "global": True,
+                "tag": tag,
+                "posts": [
+                    {
+                        "id": p["id"],
+                        "date": p["date"],
+                        "text": p["text"],
+                        "url": p["url"],
+                        "source": p["source"],
+                        "kind": p["kind"],
+                    }
+                    for p in rows
+                ],
+            }
+        )
 
     if name:
         # Посты конкретной подписки
@@ -339,6 +365,60 @@ async def api_topic_reset_exclusions(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "removed": removed})
 
 
+async def api_config(request: Request) -> JSONResponse:
+    """GET — текущий конфиг провайдера/агента; POST — сохранить.
+
+    Конфиг хранится в config.json (перечитывается load_config() при каждом
+    обращении агента, поэтому перезапуск не нужен).
+    """
+    if request.method == "GET":
+        return JSONResponse(load_config())
+    if request.method == "POST":
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        cfg = load_config()
+        # Обновляем только известные поля поверх текущего конфига.
+        for k in ("provider", "model", "systemPrompt"):
+            if k in data and data[k] not in (None, ""):
+                cfg[k] = data[k]
+        sched = data.get("schedule")
+        if isinstance(sched, dict):
+            cfg.setdefault("schedule", {})
+            for sk, sv in sched.items():
+                if sv in (None, ""):
+                    continue
+                try:
+                    cfg["schedule"][sk] = int(sv)
+                except (TypeError, ValueError):
+                    cfg["schedule"][sk] = sv
+        provs = data.get("providers")
+        if isinstance(provs, dict):
+            cfg.setdefault("providers", {})
+            for pname, pblock in provs.items():
+                if isinstance(pblock, dict):
+                    cfg["providers"].setdefault(pname, {})
+                    cfg["providers"][pname].update(pblock)
+        try:
+            save_config(cfg)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"ok": True})
+    return JSONResponse({"error": "Метод не поддерживается"}, status_code=405)
+
+
+async def api_config_test(request: Request) -> JSONResponse:
+    """POST /api/config/test — проверить связь с моделью прямо сейчас."""
+    if request.method != "POST":
+        return JSONResponse({"error": "Метод не поддерживается"}, status_code=405)
+    try:
+        res = test_connection()
+    except Exception as e:
+        res = {"ok": False, "error": str(e)}
+    return JSONResponse(res)
+
+
 def register_ui(mcp):
     """Зарегистрировать маршруты веб-интерфейса на MCP-сервере."""
     mcp.custom_route("/", methods=["GET"])(lambda request: RedirectResponse("/ui"))
@@ -354,3 +434,6 @@ def register_ui(mcp):
     mcp.custom_route("/api/topics/run-all", methods=["POST"])(api_topic_run_all)
     mcp.custom_route("/api/topics/toggle", methods=["POST"])(api_topic_toggle)
     mcp.custom_route("/api/topics/reset", methods=["POST"])(api_topic_reset_exclusions)
+    # Настройки провайдера / модели ИИ (карточка в «Мои темы»)
+    mcp.custom_route("/api/config", methods=["GET", "POST"])(api_config)
+    mcp.custom_route("/api/config/test", methods=["POST"])(api_config_test)

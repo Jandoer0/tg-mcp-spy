@@ -106,7 +106,7 @@ def remove_source_tool(name: str) -> str:
 # «Мои темы»: отслеживаемые темы и локальный ИИ-агент
 # --------------------------------------------------------------------------- #
 @mcp.tool()
-def add_topic_tool(name: str, tag: str, schedule_minutes: int = 30, description: str = "") -> str:
+def add_topic_tool(name: str, tag: str, schedule_minutes: int = 1440, description: str = "") -> str:
     """Создать отслеживаемую тему «Мои темы» с тегом/меткой.
 
     Локальный ИИ-агент будет отбирать из общей ленты посты, относящиеся

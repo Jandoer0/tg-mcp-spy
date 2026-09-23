@@ -94,7 +94,12 @@ ssh-add <PATH_TO_SSH_KEY>   # спросит фразу один раз
 - добавить Telegram-канал по имени (без `@`);
 - добавить канал через RSSHub (если `t.me` недоступен);
 - добавить произвольную RSS/RSSHub-ленту по ссылке;
-- удалять подписки и просматривать последние посты.
+- удалять подписки и просматривать ленту новостей;
+- во вкладке «Лента новостей» фильтровать посты по тегу темы (выпадающее
+  меню «Фильтр по тегу» — показывает только посты, отмеченные нужным тегом);
+- во вкладке «Мои темы» настраивать провайдера и модель ИИ прямо из интерфейса
+  (карточка «Настройки провайдера ИИ»: baseUrl, модель, ключ, периодичность
+  авто-обновления и запуска агента, а также «Проверить соединение»).
 
 ## Работа с агентами (Hermes, pi.dev)
 
@@ -167,14 +172,14 @@ mcp_servers:
 ```json
 {
   "provider": "ollama",
-  "model": "llama3.2",
-  "schedule": { "enabled": true, "feedRefreshMinutes": 60, "topicMinutes": 30 },
+  "model": "qwen3.5:9b-128k",
+  "schedule": { "enabled": true, "feedRefreshMinutes": 60, "topicMinutes": 1440 },
   "providers": {
     "ollama": {
-      "baseUrl": "http://127.0.0.1:11434/v1",
+      "baseUrl": "http://host.containers.internal:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
-      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false }
+      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false, "jsonObjectFormat": true, "disableThinking": true }
     }
   }
 }
@@ -187,7 +192,8 @@ mcp_servers:
 **Авто-обновление ленты и периодичность агента.** В отдельном фоновом
 потоке крутится планировщик: он сам обновляет ленту (раз в
 `feedRefreshMinutes`) и для каждой активной темы запускает агента
-(раз в `topicMinutes`, либо по индивидуальному интервалу темы). Запустить
+(по умолчанию **раз в сутки**: `topicMinutes = 1440`, либо по
+индивидуальному интервалу темы `schedule_minutes` при создании). Запустить
 агента вручную можно кнопкой «Запустить агента» в теме или инструментом
 `run_topic_agent_tool` для MCP-агентов (Hermes/pi.dev).
 

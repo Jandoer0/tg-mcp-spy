@@ -17,7 +17,7 @@ CONFIG_PATH = os.environ.get("AGENT_CONFIG", str(Path(__file__).parent / "config
 # Дефолтный конфиг провайдера (Ollama, локальная слабая модель).
 DEFAULT_CONFIG = {
     "provider": "ollama",
-    "model": "llama3.2",
+    "model": "qwen3.5:9b-128k",
     "systemPrompt": (
         "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли "
         "каждый пост из списка к заданной теме. Отвечай только JSON, "
@@ -26,11 +26,11 @@ DEFAULT_CONFIG = {
     "schedule": {
         "enabled": True,
         "feedRefreshMinutes": 60,  # авто-обновление ленты (мин)
-        "topicMinutes": 30,        # периодичность запуска агента по теме (мин)
+        "topicMinutes": 1440,      # периодичность запуска агента по теме (мин, раз в сутки)
     },
     "providers": {
         "ollama": {
-            "baseUrl": "http://127.0.0.1:11434/v1",
+            "baseUrl": "http://host.containers.internal:11434/v1",
             "api": "openai-completions",
             "apiKey": "ollama",
             "compat": {
@@ -38,6 +38,10 @@ DEFAULT_CONFIG = {
                 "supportsReasoningEffort": False,
                 # Ollama через openai-compat умеет форсировать JSON-ответ.
                 "jsonObjectFormat": True,
+                # Отключает рассуждения (CoT) для моделей вроде Qwen3 —
+                # иначе они «думают» десятки секунд. Включается в config.json
+                # под конкретную модель; здесь по умолчанию выключено.
+                "disableThinking": False,
             },
         }
     },
@@ -102,3 +106,20 @@ def load_config() -> dict:
 def get_provider(cfg: dict | None = None) -> dict:
     cfg = cfg or load_config()
     return cfg.get("providers", {}).get(cfg.get("provider", "ollama"), {})
+
+
+def get_config_path() -> str:
+    """Путь к файлу config.json (рядом с кодом)."""
+    return CONFIG_PATH
+
+
+def save_config(cfg: dict) -> None:
+    """Сохранить конфиг провайдера/агента в config.json.
+
+    Вызывается из веб-интерфейса (карточка настроек провайдера). load_config()
+    перечитывает файл при каждом обращении, поэтому перезапуск не нужен.
+    """
+    path = CONFIG_PATH
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        __import__("json").dump(cfg, f, ensure_ascii=False, indent=2)
