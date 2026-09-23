@@ -12,6 +12,7 @@ from typing import Optional
 
 import httpx
 import feedparser
+from bs4 import BeautifulSoup
 
 DEFAULT_RSSHUB = "https://rsshub.app"
 
@@ -42,6 +43,28 @@ def _parse_date(entry: dict) -> str:
     return ""
 
 
+def _html_to_text(html: str) -> str:
+    """Превратить HTML-содержимое RSS/Atom в чистый текст.
+
+    Убирает теги разметки (``<p>``, ``<a>``, ``<code>``, ``<br>`` и т.п.),
+    декодирует HTML-сущности (``&amp;`` → ``&``, ``&lt;`` → ``<``) и
+    переводит переносы строк. Раньше сырой HTML из ``summary`` попадал в
+    текст поста целиком, из-за чего в выдаче MCP/агента и веб-интерфейса
+    были видны теги и служебные символы разметки/кода.
+    """
+    if not html:
+        return ""
+    soup = BeautifulSoup(html, "lxml")
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    for tag in soup.find_all(["p", "div"]):
+        tag.insert_after("\n")
+    raw = soup.get_text(separator="")
+    raw = raw.replace("\u00a0", " ")
+    lines = [" ".join(line.split()) for line in raw.split("\n")]
+    return "\n".join(lines).strip()
+
+
 def parse_feed(content: str) -> list[dict]:
     parsed = feedparser.parse(content)
     posts = []
@@ -50,7 +73,8 @@ def parse_feed(content: str) -> list[dict]:
         guid = entry.get("guid") or link
         title = entry.get("title", "")
         summary = entry.get("summary", "") or entry.get("description", "")
-        text = (title + "\n\n" + summary).strip() if (title or summary) else ""
+        summary_text = _html_to_text(summary)
+        text = (title + "\n\n" + summary_text).strip() if (title or summary_text) else ""
         posts.append(
             {
                 "ext_id": guid or link,

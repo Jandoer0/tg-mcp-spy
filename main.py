@@ -24,6 +24,7 @@ from db import (
     list_sources,
     get_source,
     get_posts,
+    rotate_if_needed,
 )
 from rss_parser import rsshub_telegram_url, DEFAULT_RSSHUB
 from webui import register_ui, _refresh_telegram, _refresh_rss
@@ -32,6 +33,8 @@ RSSHUB_BASE_URL = os.environ.get("RSSHUB_BASE_URL", DEFAULT_RSSHUB)
 
 mcp = MCPServer("Telegram Watcher")
 init_db()
+# При запуске — подчистить базу, если она уже превышает лимит размера.
+rotate_if_needed()
 
 
 # --------------------------------------------------------------------------- #

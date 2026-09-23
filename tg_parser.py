@@ -17,6 +17,37 @@ def fetch_page(channel: str, before: Optional[int] = None) -> str:
     return resp.text
 
 
+def _extract_message_text(node) -> str:
+    """Извлечь читаемый текст сообщения из HTML Telegram-виджета.
+
+    Сохраняет пробелы между словами (в т.ч. вокруг ссылок, хештегов,
+    упоминаний), переводит ``<br>`` и абзацы ``<p>`` в переносы строк и
+    убирает служебную HTML-разметку.
+
+    Раньше использовался ``get_text(strip=True)``, который срезает каждый
+    фрагмент текста по отдельности — пробел между соседними элементами
+    (например, ``<a>слово</a> <a>#хештег</a>``) превращается в ``""`` и
+    слова «склеиваются» (``слово#хештег``). Здесь берём текст без
+    срезания и лишь нормализуем пробелы построчно.
+    """
+    if node is None:
+        return ""
+    # <br> → перевод строки
+    for br in node.find_all("br"):
+        br.replace_with("\n")
+    # после каждого абзаца — перевод строки
+    for p in node.find_all("p"):
+        p.insert_after("\n")
+    # get_text без strip сохраняет пробелы между элементами
+    raw = node.get_text(separator="")
+    # неразрывные пробелы → обычные
+    raw = raw.replace("\u00a0", " ")
+    # внутри каждой строки схлопываем повторяющиеся пробелы,
+    # межстрочные переносы сохраняем
+    lines = [" ".join(line.split()) for line in raw.split("\n")]
+    return "\n".join(lines).strip()
+
+
 def parse_posts(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     posts = []
@@ -31,7 +62,7 @@ def parse_posts(html: str) -> list[dict]:
         tg_post_id = int(data_post.split("/")[-1])
 
         text_elem = msg.select_one(".tgme_widget_message_text")
-        text = text_elem.get_text(strip=True) if text_elem else ""
+        text = _extract_message_text(text_elem)
 
         time_elem = msg.select_one("time")
         date_iso = time_elem.get("datetime", "")[:10] if time_elem else ""

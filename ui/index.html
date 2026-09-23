@@ -125,11 +125,12 @@
     <!-- Вкладка 1: последние посты (главная) -->
     <section id="tab-posts" class="tab-panel">
       <div class="card">
-        <h2>Последние посты <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button></h2>
+        <h2>Последние посты <span id="posts-source-label" class="hint" style="margin:0;font-weight:400;"></span> <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button></h2>
         <div class="feed-filters">
           <button class="chip active" data-kind="">Все</button>
           <button class="chip" data-kind="telegram">Telegram</button>
           <button class="chip" data-kind="rss">RSS</button>
+          <button class="chip" id="chip-clear-source" data-kind="__clear_source" style="display:none;">✕ Сбросить фильтр</button>
         </div>
         <div id="posts" class="posts">Загрузка…</div>
       </div>
@@ -260,7 +261,12 @@
         }
         box.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => delSource(b.dataset.del)));
         box.querySelectorAll("[data-posts]").forEach((b) =>
-          b.addEventListener("click", () => { switchTab("posts"); loadPosts(b.dataset.posts); })
+          b.addEventListener("click", () => {
+            currentSource = b.dataset.posts;
+            currentKind = "";
+            syncChips();
+            switchTab("posts");
+          })
         );
       } catch (e) {
         box.innerHTML = `<div class="empty">Не удалось загрузить: ${e.message}</div>`;
@@ -278,6 +284,19 @@
     // ----- Посты (вкладка "Последние посты") -----
     let currentSource = ""; // "" = все подписки
     let currentKind = "";   // "" = все типы, "telegram" / "rss"
+
+    // Обновить подпись фильтра по источнику в заголовке вкладки
+    function updateSourceLabel() {
+      const label = $("#posts-source-label");
+      const clearChip = $("#chip-clear-source");
+      if (currentSource) {
+        label.textContent = `(фильтр: @${currentSource})`;
+        clearChip.style.display = "";
+      } else {
+        label.textContent = "";
+        clearChip.style.display = "none";
+      }
+    }
 
     // Один пост (с data-id для дедупликации при добавлении сверху)
     function buildPostEl(p) {
@@ -297,8 +316,8 @@
       );
     }
 
-    async function loadPosts(name) {
-      if (typeof name === "string") { currentSource = name; currentKind = ""; syncChips(); }
+    async function loadPosts() {
+      updateSourceLabel();
       const box = $("#posts");
       box.innerHTML = "Загрузка…";
       let path;
@@ -378,12 +397,21 @@
     // Фильтры по типу источника (Все / Telegram / RSS)
     document.querySelectorAll(".chip").forEach((c) =>
       c.addEventListener("click", () => {
+        // Кнопка «Сбросить фильтр» обрабатывается отдельно
+        if (c.dataset.kind === "__clear_source") return;
         currentKind = c.dataset.kind || "";
         currentSource = "";
         syncChips();
         loadPosts();
       })
     );
+    // Сбросить фильтр по конкретному источнику (кнопка рядом с чипами)
+    $("#chip-clear-source").addEventListener("click", () => {
+      currentSource = "";
+      currentKind = "";
+      syncChips();
+      loadPosts();
+    });
     $("#form-tg").addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = e.target.name.value.trim();
