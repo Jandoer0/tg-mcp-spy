@@ -25,9 +25,17 @@ from db import (
     get_source,
     get_posts,
     rotate_if_needed,
+    # «Мои темы»
+    add_topic,
+    remove_topic,
+    get_topic,
+    list_topics,
+    reset_exclusions,
 )
 from rss_parser import rsshub_telegram_url, DEFAULT_RSSHUB
 from webui import register_ui, _refresh_telegram, _refresh_rss
+from agent import run_topic_agent
+from scheduler import start_scheduler
 
 RSSHUB_BASE_URL = os.environ.get("RSSHUB_BASE_URL", DEFAULT_RSSHUB)
 
@@ -92,6 +100,78 @@ def remove_source_tool(name: str) -> str:
     if remove_source(n):
         return f"Подписка @{n} удалена"
     return f"Подписка @{n} не найдена"
+
+
+# --------------------------------------------------------------------------- #
+# «Мои темы»: отслеживаемые темы и локальный ИИ-агент
+# --------------------------------------------------------------------------- #
+@mcp.tool()
+def add_topic_tool(name: str, tag: str, schedule_minutes: int = 30, description: str = "") -> str:
+    """Создать отслеживаемую тему «Мои темы» с тегом/меткой.
+
+    Локальный ИИ-агент будет отбирать из общей ленты посты, относящиеся
+    к теме (по тегу), и собирать их в хронологию темы. schedule_minutes —
+    периодичность запуска агента для этой темы (в минутах). description —
+    краткое пояснение, что именно имеется в виду под тегом (чтобы модель
+    не отбирала всё подряд); держите его коротким, чтобы не раздувать
+    контекст слабой модели.
+    """
+    res = add_topic(name, tag, schedule_minutes, description=description)
+    if not res.get("ok"):
+        return f"Ошибка: {res.get('error')}"
+    return f"Тема «{res['name']}» (тег: {res['tag']}) создана"
+
+
+@mcp.tool()
+def remove_topic_tool(name: str) -> str:
+    """Удалить отслеживаемую тему «Мои темы» (вместе с её хронологией)."""
+    if remove_topic(name):
+        return f"Тема «{name}» удалена"
+    return f"Тема «{name}» не найдена"
+
+
+@mcp.tool()
+def reset_topic_exclusions_tool(name: str, post_id: int | None = None) -> str:
+    """Снять признак исключения у темы «Мои темы» (вернуть посты агенту).
+
+    Без post_id снимает все ручные исключения темы; с post_id — только для
+    одного поста. После этого агент сможет снова отобрать пост(ы) при
+    следующем прогоне. Это «явный сброс»: сам по себе агент не возвращает
+    исключённые посты обратно в тему.
+    """
+    topic = get_topic(name)
+    if not topic:
+        return f"Тема «{name}» не найдена"
+    removed = reset_exclusions(topic["id"], int(post_id) if post_id is not None else None)
+    return f"Снято исключений: {removed}"
+
+
+@mcp.tool()
+def list_topics_tool() -> str:
+    """Показать список отслеживаемых тем «Мои темы»."""
+    topics = list_topics()
+    if not topics:
+        return "Нет отслеживаемых тем"
+    lines = []
+    for t in topics:
+        state = "активна" if t.get("active") else "выкл."
+        lines.append(
+            f"• {t['name']} (тег: {t['tag']}, {state}, постов: {t.get('posts_count', 0)})"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def run_topic_agent_tool(name: str) -> str:
+    """Запустить локального ИИ-агента для темы сейчас: отобрать релевантные посты."""
+    topic = get_topic(name)
+    if not topic:
+        return f"Тема «{name}» не найдена"
+    res = run_topic_agent(topic_id=topic["id"], max_batches=5)
+    return (
+        f"Тема «{name}»: просканировано {res.get('scanned', 0)}, "
+        f"добавлено {res.get('added', 0)}, всего {res.get('total', 0)}"
+    )
 
 
 @mcp.tool()
@@ -249,6 +329,8 @@ async def complete_source_name(ref, argument: CompletionArgument, context) -> Co
 def build_app():
     """Собрать ASGI-приложение: MCP (на /mcp) + веб-интерфейс (/ui, /api)."""
     register_ui(mcp)
+    # Фоновый планировщик: авто-обновление ленты + периодический запуск агента.
+    start_scheduler()
     if hasattr(mcp, "streamable_http_app"):
         return mcp.streamable_http_app(json_response=True)
     return mcp.http_app()  # запасной вариант для старых версий SDK
