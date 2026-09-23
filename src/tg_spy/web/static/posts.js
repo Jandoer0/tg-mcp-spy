@@ -53,8 +53,38 @@ export async function loadPosts() {
     const frag = document.createDocumentFragment();
     for (const p of data.posts) frag.appendChild(buildPostEl(p));
     box.appendChild(frag);
+    await decoratePostTags(box, data.posts);
   } catch (e) {
     box.innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+// Подтянуть теги пользователя (темы) для постов и подписать карточки.
+async function decoratePostTags(box, posts) {
+  const ids = posts.filter((p) => p.id != null).map((p) => p.id);
+  if (!ids.length) return;
+  try {
+    const tagsMap = await api("/api/posts/tags?ids=" + ids.join(","));
+    for (const p of posts) {
+      const tags = tagsMap[String(p.id)];
+      if (!tags || !tags.length) continue;
+      const el = box.querySelector(`.post[data-id="${p.id}"]`);
+      if (!el) continue;
+      const tagsHtml = tags
+        .map(
+          (t) =>
+            `<span class="usertag" title="тема: ${escapeHtml(t.name)}">${escapeHtml(t.tag)}</span>`
+        )
+        .join("");
+      const existing = el.querySelector(".post-tags");
+      if (existing) {
+        existing.outerHTML = `<div class="post-tags">${tagsHtml}</div>`;
+      } else {
+        el.insertAdjacentHTML("beforeend", `<div class="post-tags">${tagsHtml}</div>`);
+      }
+    }
+  } catch (_e) {
+    /* теги некритичны — пропускаем */
   }
 }
 
@@ -80,6 +110,7 @@ export async function prependFresh() {
   box.insertBefore(frag, box.firstChild);
   const empty = box.querySelector(".empty");
   if (empty) empty.remove();
+  await decoratePostTags(box, fresh);
   return fresh.length;
 }
 

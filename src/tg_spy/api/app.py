@@ -14,6 +14,7 @@ from ..mcp import mcp
 from ..scheduler.worker import start_scheduler
 from .web import (
     api_config,
+    api_config_models,
     api_config_test,
     api_posts,
     api_rsshub,
@@ -43,6 +44,7 @@ def register_web(mcp) -> None:
     mcp.custom_route("/api/sources", methods=["GET", "POST"])(api_sources)
     mcp.custom_route("/api/sources/{name}", methods=["DELETE"])(api_source_delete)
     mcp.custom_route("/api/posts", methods=["GET"])(api_posts)
+    mcp.custom_route("/api/posts/tags", methods=["GET"])(api_posts_tags)
     mcp.custom_route("/api/refresh/posts", methods=["POST"])(api_refresh_posts)
     mcp.custom_route("/api/rsshub", methods=["GET"])(api_rsshub)
 
@@ -57,6 +59,7 @@ def register_web(mcp) -> None:
 
     mcp.custom_route("/api/config", methods=["GET", "POST"])(api_config)
     mcp.custom_route("/api/config/test", methods=["POST"])(api_config_test)
+    mcp.custom_route("/api/config/models", methods=["POST"])(api_config_models)
 
 
 def create_app(start_background: bool = True):

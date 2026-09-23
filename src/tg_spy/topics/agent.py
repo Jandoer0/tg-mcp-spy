@@ -270,6 +270,43 @@ def run_topic_agent_async(
     threading.Thread(target=_t, name="topic-agent", daemon=True).start()
 
 
+def list_models(base_url: str, api_key: str) -> dict:
+    """Запросить у провайдера список доступных моделей (OpenAI-совместимый /models).
+
+    Используется в настройках провайдера: пользователь вводит URL, сайт
+    опрашивает провайдера и подставляет список моделей в поле выбора.
+    """
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return {"ok": False, "error": "Не указан адрес провайдера (API URL)"}
+    url = f"{base}/models"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        resp = httpx.get(url, headers=headers, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Не удалось получить список моделей: {e}"}
+    models: list[str] = []
+    raw = data.get("data") if isinstance(data, dict) else None
+    if isinstance(raw, list):
+        for m in raw:
+            if isinstance(m, dict):
+                name = m.get("id") or m.get("name") or m.get("model")
+                if name:
+                    models.append(str(name))
+    elif isinstance(data, list):
+        for m in data:
+            if isinstance(m, dict):
+                name = m.get("id") or m.get("name") or m.get("model")
+                if name:
+                    models.append(str(name))
+    models = sorted(set(models))
+    return {"ok": True, "models": models}
+
+
 def test_connection() -> dict:
     """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»)."""
     cfg = load_config()
@@ -291,6 +328,13 @@ def test_connection() -> dict:
                 "model": model,
                 "error": "Модель не вернула ответ (нет соединения / таймаут / ошибка провайдера)",
             }
-        return {"ok": True, "model": model, "reply": (content or "").strip()[:200]}
+        reply = (content or "").strip()[:200]
+        # Читаемое сообщение для UI: «Связь установлена. Модель <имя> активна.»
+        return {
+            "ok": True,
+            "model": model,
+            "reply": reply,
+            "message": f"Связь установлена. Модель {model} активна.",
+        }
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "model": model, "error": str(e)}

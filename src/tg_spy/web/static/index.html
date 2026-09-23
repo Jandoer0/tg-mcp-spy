@@ -51,11 +51,9 @@
           <button class="chip active" data-kind="">Все</button>
           <button class="chip" data-kind="telegram">Telegram</button>
           <button class="chip" data-kind="rss">RSS</button>
+          <span class="filter-sep"></span>
+          <select id="tag-filter" class="tag-filter-select"><option value="">None</option></select>
           <button class="chip" id="chip-clear-source" data-kind="__clear_source" style="display:none;">✕ Сбросить фильтр</button>
-        </div>
-        <div class="feed-filters" style="margin-top:10px;">
-          <label class="hint" style="margin:0 8px 0 2px;">Фильтр по тегу:</label>
-          <select id="tag-filter"><option value="">— все теги —</option></select>
         </div>
         <div id="posts" class="posts">Загрузка…</div>
       </div>
@@ -122,38 +120,40 @@
       </div>
 
       <div class="card" id="provider-card">
-        <h2>Настройки провайдера ИИ <button id="config-test" class="ghost" title="Проверить связь с моделью">Проверить соединение</button></h2>
-        <p class="hint">Локальная модель (Ollama) обслуживает «Мои темы». Эндпоинт должен быть
-          доступен из контейнера, например <code>http://host.containers.internal:11434/v1</code>.
-          Конфиг хранится в <code>config.json</code> и применяется сразу (перезапуск не нужен).</p>
-        <div class="row">
-          <input name="baseUrl" placeholder="baseUrl, напр. http://host.containers.internal:11434/v1" style="flex:1 1 320px;" />
-          <input name="model" placeholder="модель, напр. qwen3.5:9b-128k" style="flex:1 1 200px;" />
-          <input name="apiKey" placeholder="apiKey (ollama)" style="flex:0 1 150px;" />
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <input name="feedRefreshMinutes" placeholder="авто-обновление ленты (мин)" style="flex:1 1 200px;" />
-          <input name="topicMinutes" placeholder="период агента (мин)" style="flex:1 1 200px;" />
-        </div>
-        <div class="row" style="margin-top:10px; align-items:center; flex-wrap:wrap;">
-          <label class="hint" style="margin:0 14px 0 0;"><input type="checkbox" id="cfg-dev" /> supportsDeveloperRole</label>
-          <label class="hint" style="margin:0 14px 0 0;"><input type="checkbox" id="cfg-reason" /> supportsReasoningEffort</label>
-          <label class="hint" style="margin:0 14px 0 0;"><input type="checkbox" id="cfg-json" /> jsonObjectFormat</label>
-          <label class="hint" style="margin:0 14px 0 0;"><input type="checkbox" id="cfg-think" /> think:false (без рассуждений)</label>
-          <button type="button" id="config-save" style="margin-left:auto;">Сохранить</button>
-        </div>
-        <p class="hint" id="config-status" style="margin:10px 0 0;"></p>
-      </div>
-
-      <!-- Детали темы (открывается по клику на тему) -->
-      <div class="card hidden" id="topic-detail">
-        <h2><button class="ghost" id="topic-back">← Назад</button> <span id="topic-title"></span></h2>
-        <p class="hint" id="topic-sub"></p>
-        <div class="row" style="margin-bottom:12px;">
-          <button id="topic-run" class="ghost">Запустить агента сейчас</button>
-          <button id="topic-reset" class="ghost" title="Снять ручные исключения — агент сможет снова собрать посты">Сбросить исключения</button>
-        </div>
-        <div id="topic-posts" class="posts">Загрузка…</div>
+        <h2>Настройки провайдера ИИ</h2>
+        <p class="hint">Локальная модель (например Ollama) обслуживает «Мои темы». Укажите адрес
+          провайдера — сайт сам опросит его и подгрузит список доступных моделей. Настройки
+          применяются сразу (перезапуск не нужен).</p>
+        <form id="form-provider" class="provider-form">
+          <label class="field">
+            <span class="field-label">Адрес провайдера (API URL)</span>
+            <input name="baseUrl" placeholder="например http://host.containers.internal:11434/v1" />
+          </label>
+          <label class="field">
+            <span class="field-label">Модель</span>
+            <input name="model" list="model-list" placeholder="выберите из списка или введите вручную" autocomplete="off" />
+            <datalist id="model-list"></datalist>
+            <button type="button" id="config-fetch-models" class="ghost small">Получить список моделей</button>
+          </label>
+          <label class="field">
+            <span class="field-label">API-ключ (оставьте «ollama» для локальной модели)</span>
+            <input name="apiKey" placeholder="ollama" />
+          </label>
+          <div class="field">
+            <span class="field-label">Возможности модели</span>
+            <div class="checks">
+              <label><input type="checkbox" id="cfg-dev" /> Поддерживает роль developer (system)</label>
+              <label><input type="checkbox" id="cfg-reason" /> Поддерживает уровень рассуждений (reasoning effort)</label>
+              <label><input type="checkbox" id="cfg-json" /> Ответ в формате JSON</label>
+              <label><input type="checkbox" id="cfg-think" /> Отключить режим рассуждений (think:false)</label>
+            </div>
+          </div>
+          <div class="provider-actions">
+            <button type="submit" id="config-save">Сохранить</button>
+            <button type="button" id="config-test" class="ghost">Проверить соединение</button>
+          </div>
+        </form>
+        <p class="config-status" id="config-status"></p>
       </div>
     </section>
   </main>

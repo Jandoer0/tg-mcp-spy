@@ -29,6 +29,7 @@ from ..db import (
 from ..ingest import rss
 from ..ingest.refresh import refresh_all_sources
 from ..topics import agent, service
+from ..config import get_provider, load_config
 
 WEB_DIR = Path(__file__).parent.parent / "web" / "static"
 
@@ -179,6 +180,27 @@ async def api_rsshub(request: Request) -> JSONResponse:
     return JSONResponse({"url": rss.rsshub_telegram_url(base, username)})
 
 
+async def api_posts_tags(request: Request) -> JSONResponse:
+    """Вернуть теги пользователя (темы) для списка постов.
+
+    query: ?ids=1,2,3  →  {"1": [{"name", "tag"}], ...}
+    """
+    raw = request.query_params.get("ids", "").strip()
+    if not raw:
+        return JSONResponse({})
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    if not ids:
+        return JSONResponse({})
+    from ..db import get_post_topics
+
+    mapping = get_post_topics(ids)
+    return JSONResponse({str(k): v for k, v in mapping.items()})
+
+
 # --------------------------------------------------------------------------- #
 # «Мои темы»
 # --------------------------------------------------------------------------- #
@@ -311,6 +333,27 @@ async def api_config(request: Request) -> JSONResponse:
 async def api_config_test(request: Request) -> JSONResponse:
     try:
         return JSONResponse(agent.test_connection())
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
+async def api_config_models(request: Request) -> JSONResponse:
+    """Запросить у провайдера список доступных моделей.
+
+    Тело запроса: {"baseUrl": "...", "apiKey": "..."} (адрес берётся из поля
+    ввода, а не из сохранённого конфига — чтобы пользователь мог проверить
+    новый адрес до сохранения). Если тело пустое — берётся сохранённый конфиг.
+    """
+    body = await _json(request, default={})
+    base_url = (body.get("baseUrl") or "").strip()
+    api_key = (body.get("apiKey") or "").strip()
+    if not base_url:
+        cfg = load_config()
+        prov = get_provider(cfg)
+        base_url = prov.base_url or ""
+        api_key = api_key or (prov.api_key or "")
+    try:
+        return JSONResponse(agent.list_models(base_url, api_key))
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(e)})
 

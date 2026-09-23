@@ -46,6 +46,7 @@ get_excluded_ids = topics.get_excluded_ids
 reset_exclusions = topics.reset_exclusions
 get_tagged_posts = topics.get_tagged_posts
 get_tagged_total = topics.get_tagged_total
+get_post_topics = topics.get_post_topics
 
 __all__ = [
     "DB_PATH", "MAX_DB_BYTES", "get_conn", "init_db", "rotate_if_needed",
@@ -58,6 +59,6 @@ __all__ = [
     "add_topic", "get_topic", "get_topic_by_id", "list_topics", "remove_topic",
     "set_topic_active", "update_topic_run", "tag_post", "untag_post",
     "exclude_post", "get_excluded_ids", "reset_exclusions", "get_tagged_posts",
-    "get_tagged_total",
+    "get_tagged_total", "get_post_topics",
     "posts", "sources", "topics",
 ]

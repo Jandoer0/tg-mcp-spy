@@ -247,3 +247,25 @@ def get_tagged_total(topic_id: int) -> int:
     ).fetchone()
     conn.close()
     return int(row[0]) if row else 0
+
+
+def get_post_topics(post_ids: list[int]) -> dict[int, list[dict]]:
+    """Вернуть словарь {post_id: [{"name", "tag"}, ...]} — темы (теги пользователя),
+    к которым отнесён каждый пост. Используется для подписи постов в ленте."""
+    result: dict[int, list[dict]] = {int(pid): [] for pid in post_ids}
+    if not post_ids:
+        return result
+    placeholders = ",".join("?" * len(post_ids))
+    conn = get_conn()
+    rows = conn.execute(
+        f"""SELECT pt.post_id AS post_id, t.name AS name, t.tag AS tag
+               FROM posts_tags pt
+               JOIN topics t ON t.id = pt.topic_id
+               WHERE pt.post_id IN ({placeholders})""",
+        [int(p) for p in post_ids],
+    ).fetchall()
+    conn.close()
+    for r in rows:
+        pid = int(r["post_id"])
+        result.setdefault(pid, []).append({"name": r["name"], "tag": r["tag"]})
+    return result

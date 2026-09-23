@@ -3,7 +3,7 @@
 import { $, api, escapeHtml, renderBody, toast } from "./core.js";
 import { state } from "./state.js";
 
-export function buildPostEl(p) {
+export function buildPostEl(p, topicsForPost = []) {
   const el = document.createElement("div");
   el.className = "post";
   if (p.id != null) el.dataset.id = String(p.id);
@@ -14,8 +14,20 @@ export function buildPostEl(p) {
   const kindTag = p.kind
     ? `<span class="badge ${escapeHtml(p.kind)}">${escapeHtml(p.kind)}</span> `
     : "";
+  // Теги пользователя (темы), к которым отнесён пост.
+  const tagsHtml = topicsForPost.length
+    ? `<div class="post-tags">` +
+      topicsForPost
+        .map(
+          (t) =>
+            `<span class="usertag" title="тема: ${escapeHtml(t.name)}">${escapeHtml(t.tag)}</span>`
+        )
+        .join("") +
+      `</div>`
+    : "";
   el.innerHTML = `<div class="posthead">${kindTag}${srcTag}${escapeHtml(p.date || "—")} · ${url}
-        <button class="addbtn" title="Добавить в тему">＋</button></div><div class="text">${renderBody(p.text)}</div>`;
+        <button class="addbtn" title="Добавить в тему">＋</button></div>
+      <div class="text">${renderBody(p.text)}</div>${tagsHtml}`;
   el.querySelector(".addbtn").addEventListener("click", (e) => {
     e.stopPropagation();
     toggleAddMenu(el, p.id);
@@ -42,49 +54,42 @@ export function toggleAddMenu(el, postId) {
   const btn = el.querySelector(".addbtn");
   const rect = btn.getBoundingClientRect();
   const menu = document.createElement("div");
-  menu.className = "addmenu-pop";
-  const sel = document.createElement("select");
+  menu.className = "addmenu-pop addmenu-list";
+  const title = document.createElement("div");
+  title.className = "addmenu-title";
+  title.textContent = "Добавить пост в тему:";
+  menu.appendChild(title);
   if (!state.allTopics.length) {
-    sel.innerHTML = '<option value="">— сначала создайте тему —</option>';
+    const empty = document.createElement("div");
+    empty.className = "addmenu-empty";
+    empty.textContent = "Сначала создайте тему во вкладке «Мои темы».";
+    menu.appendChild(empty);
   } else {
-    sel.innerHTML = state.allTopics
-      .map(
-        (t) =>
-          `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)} — ${escapeHtml(t.tag)}</option>`
-      )
-      .join("");
-  }
-  const ok = document.createElement("button");
-  ok.textContent = "Добавить";
-  ok.addEventListener("click", async (ev) => {
-    ev.stopPropagation();
-    const name = sel.value;
-    if (!name) {
-      toast("Сначала создайте тему", true);
-      return;
-    }
-    try {
-      await api(`/api/topics/posts?name=${encodeURIComponent(name)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_id: postId }),
+    const list = document.createElement("div");
+    list.className = "addmenu-items";
+    for (const t of state.allTopics) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "addmenu-item";
+      item.innerHTML = `<span class="ai-name">${escapeHtml(t.name)}</span><span class="ai-tag">${escapeHtml(t.tag)}</span>`;
+      item.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        try {
+          await api(`/api/topics/posts?name=${encodeURIComponent(t.name)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ post_id: postId }),
+          });
+          toast(`Добавлено в «${t.name}»`);
+          closeAddMenu();
+        } catch (err) {
+          toast(err.message, true);
+        }
       });
-      toast(`Добавлено в «${name}»`);
-      closeAddMenu();
-    } catch (err) {
-      toast(err.message, true);
+      list.appendChild(item);
     }
-  });
-  const cancel = document.createElement("button");
-  cancel.className = "ghost";
-  cancel.textContent = "Отмена";
-  cancel.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    closeAddMenu();
-  });
-  menu.appendChild(sel);
-  menu.appendChild(ok);
-  menu.appendChild(cancel);
+    menu.appendChild(list);
+  }
   document.body.appendChild(menu);
   addMenuEl = menu;
   const mw = menu.offsetWidth,

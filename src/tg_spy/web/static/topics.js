@@ -1,8 +1,11 @@
-// Вкладка «Мои темы»: список тем, детали, запуск агента, настройки провайдера.
+// Вкладка «Мои темы»: список тем, запуск агента, настройки провайдера.
+// Кнопка «открыть в ленте» перенаправляет во вкладку «Лента новостей»
+// с включённым фильтром по тегу темы (детальное окно темы убрано).
 
 import { $, api, escapeHtml, renderBody, toast } from "./core.js";
 import { state } from "./state.js";
 import { buildPostEl } from "./components.js";
+import { switchTab } from "./nav.js";
 
 export async function loadAllTopics() {
   try {
@@ -19,7 +22,7 @@ export function populateTagFilter() {
   if (!sel) return;
   const cur = state.currentTag;
   sel.innerHTML =
-    '<option value="">— все теги —</option>' +
+    '<option value="">None</option>' +
     state.allTopics
       .map(
         (t) =>
@@ -53,7 +56,7 @@ export async function loadTopics() {
         </div>
         ${t.description ? `<div class="t-desc">${escapeHtml(t.description)}</div>` : ""}
         <div class="t-actions">
-          <button class="link" data-open="${escapeHtml(t.name)}">открыть</button>
+          <button class="link" data-open="${escapeHtml(t.name)}" data-tag="${escapeHtml(t.tag)}">открыть в ленте</button>
           <button class="link" data-run="${escapeHtml(t.name)}">запустить агента</button>
           <button class="link" data-toggle="${escapeHtml(t.name)}" data-active="${
         t.active ? 1 : 0
@@ -64,7 +67,7 @@ export async function loadTopics() {
     }
     box
       .querySelectorAll("[data-open]")
-      .forEach((b) => b.addEventListener("click", () => openTopic(b.dataset.open)));
+      .forEach((b) => b.addEventListener("click", () => openTopicInLenta(b.dataset.tag)));
     box
       .querySelectorAll("[data-run]")
       .forEach((b) => b.addEventListener("click", () => runTopicAgent(b.dataset.run)));
@@ -116,60 +119,14 @@ export async function runTopicAgent(name) {
   }
 }
 
-export async function openTopic(name) {
-  state.currentTopic = name;
-  $("#topics-card").classList.add("hidden");
-  $("#topic-create-card").classList.add("hidden");
-  $("#topic-detail").classList.remove("hidden");
-  try {
-    const data = await api(`/api/topics/posts?name=${encodeURIComponent(name)}`);
-    const t = data.topic || {};
-    $("#topic-title").textContent = t.name || name;
-    $("#topic-sub").textContent =
-      `тег: ${t.tag || ""} · постов: ${data.total || 0}` +
-      (t.description ? ` · «${t.description}»` : "");
-    const box = $("#topic-posts");
-    if (!data.posts.length) {
-      box.innerHTML =
-        '<div class="empty">Постов в теме пока нет. Нажмите «Запустить агента» или добавьте пост из ленты (кнопка ＋ на посте).</div>';
-      return;
-    }
-    box.innerHTML = "";
-    const frag = document.createDocumentFragment();
-    for (const p of data.posts) {
-      const el = document.createElement("div");
-      el.className = "post";
-      const modeCls = p.mode === "manual" ? "manual" : "tag";
-      const modeTxt = p.mode === "manual" ? "вручную" : "по тегу";
-      const url = p.url
-        ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">источник</a>`
-        : "";
-      const srcTag = p.source ? `<span class="srcname">@${escapeHtml(p.source)}</span> · ` : "";
-      el.innerHTML = `<div class="posthead">${srcTag}${escapeHtml(p.date || "—")} ·
-        <span class="mode-badge ${modeCls}">${modeTxt}</span> ${url}
-        <button class="danger" data-entry="${p.id}">удалить</button></div><div class="text">${renderBody(p.text)}</div>`;
-      frag.appendChild(el);
-    }
-    box.appendChild(frag);
-    box
-      .querySelectorAll("[data-entry]")
-      .forEach((b) => b.addEventListener("click", () => removeTopicPost(b.dataset.entry)));
-  } catch (e) {
-    $("#topic-posts").innerHTML = `<div class="empty">${e.message}</div>`;
-  }
-}
-
-async function removeTopicPost(postId) {
-  try {
-    await api(
-      `/api/topics/posts?name=${encodeURIComponent(state.currentTopic)}&post_id=${encodeURIComponent(postId)}`,
-      { method: "DELETE" }
-    );
-    toast("Удалено из темы");
-    openTopic(state.currentTopic);
-  } catch (e) {
-    toast(e.message, true);
-  }
+export async function openTopicInLenta(tag) {
+  // Перейти на вкладку «Лента новостей» с включённым фильтром по тегу темы.
+  state.currentTag = tag || "";
+  state.currentSource = "";
+  state.currentKind = "";
+  const tf = document.getElementById("tag-filter");
+  if (tf) tf.value = state.currentTag;
+  switchTab("posts");
 }
 
 // ----- Настройки провайдера / модели ИИ -----
@@ -182,22 +139,56 @@ export async function loadConfig() {
     card.querySelector("[name=baseUrl]").value = prov.baseUrl || "";
     card.querySelector("[name=model]").value = cfg.model || "";
     card.querySelector("[name=apiKey]").value = prov.apiKey || "";
-    card.querySelector("[name=feedRefreshMinutes]").value =
-      (cfg.schedule && cfg.schedule.feedRefreshMinutes) || "";
-    card.querySelector("[name=topicMinutes]").value =
-      (cfg.schedule && cfg.schedule.topicMinutes) || "";
     const compat = prov.compat || {};
     document.getElementById("cfg-dev").checked = !!compat.supportsDeveloperRole;
     document.getElementById("cfg-reason").checked = !!compat.supportsReasoningEffort;
     document.getElementById("cfg-json").checked = !!compat.jsonObjectFormat;
     document.getElementById("cfg-think").checked = !!compat.disableThinking;
+    // Подгрузить список моделей по сохранённому адресу (если он задан).
+    fetchModels(false);
   } catch (_e) {
     /* конфиг недоступен — поля останутся пустыми */
   }
 }
 
-async function saveConfig() {
+// Опросить провайдера и заполнить <datalist> моделями.
+// notify=true — показать статус (при нажатии кнопки), иначе тихо.
+async function fetchModels(notify = true) {
   const card = document.getElementById("provider-card");
+  const st = document.getElementById("config-status");
+  const baseUrl = card.querySelector("[name=baseUrl]").value.trim();
+  const apiKey = card.querySelector("[name=apiKey]").value.trim();
+  if (!baseUrl) {
+    if (notify) st.textContent = "Сначала укажите адрес провайдера (API URL).";
+    return;
+  }
+  if (notify) st.textContent = "Получаем список моделей…";
+  try {
+    const r = await api("/api/config/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl, apiKey }),
+    });
+    const list = document.getElementById("model-list");
+    if (r.ok && Array.isArray(r.models) && r.models.length) {
+      list.innerHTML = r.models.map((m) => `<option value="${escapeHtml(m)}">`).join("");
+      if (notify) {
+        st.textContent = `Найдено моделей: ${r.models.length}. Выберите из списка или введите вручную.`;
+        toast("Список моделей обновлён");
+      }
+    } else {
+      list.innerHTML = "";
+      if (notify) st.textContent = "Модели не найдены: " + (r.error || "пусто");
+    }
+  } catch (e) {
+    if (notify) st.textContent = "Ошибка: " + e.message;
+  }
+}
+
+async function saveConfig(e) {
+  if (e) e.preventDefault();
+  const card = document.getElementById("provider-card");
+  const st = document.getElementById("config-status");
   const payload = {
     provider: "ollama",
     model: card.querySelector("[name=model]").value.trim(),
@@ -213,10 +204,6 @@ async function saveConfig() {
         },
       },
     },
-    schedule: {
-      feedRefreshMinutes: card.querySelector("[name=feedRefreshMinutes]").value.trim(),
-      topicMinutes: card.querySelector("[name=topicMinutes]").value.trim(),
-    },
   };
   try {
     await api("/api/config", {
@@ -224,11 +211,12 @@ async function saveConfig() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    document.getElementById("config-status").textContent =
-      "Сохранено. Применяется сразу (перезапуск не нужен).";
+    st.className = "config-status ok";
+    st.textContent = "Сохранено. Применяется сразу (перезапуск не нужен).";
     toast("Настройки провайдера сохранены");
   } catch (e) {
-    document.getElementById("config-status").textContent = "Ошибка: " + e.message;
+    st.className = "config-status err";
+    st.textContent = "Ошибка: " + e.message;
     toast(e.message, true);
   }
 }
@@ -239,16 +227,16 @@ async function testConfig() {
   try {
     const r = await api("/api/config/test", { method: "POST" });
     if (r.ok) {
-      st.textContent =
-        "Связь OK" +
-        (r.reply ? ": " + r.reply : "") +
-        (r.model ? " (модель: " + r.model + ")" : "");
+      st.className = "config-status ok";
+      st.textContent = r.message || `Связь установлена. Модель ${r.model || ""} активна.`;
       toast("Связь с моделью установлена");
     } else {
+      st.className = "config-status err";
       st.textContent = "Ошибка связи: " + (r.error || "нет ответа");
       toast("Модель недоступна", true);
     }
   } catch (e) {
+    st.className = "config-status err";
     st.textContent = "Ошибка: " + e.message;
     toast(e.message, true);
   }
@@ -282,29 +270,10 @@ export function initTopics() {
     }
   });
 
-  const cfgSave = document.getElementById("config-save");
+  const cfgForm = document.getElementById("form-provider");
+  const cfgFetch = document.getElementById("config-fetch-models");
   const cfgTest = document.getElementById("config-test");
-  if (cfgSave) cfgSave.addEventListener("click", saveConfig);
+  if (cfgForm) cfgForm.addEventListener("submit", saveConfig);
+  if (cfgFetch) cfgFetch.addEventListener("click", () => fetchModels(true));
   if (cfgTest) cfgTest.addEventListener("click", testConfig);
-
-  $("#topic-back").addEventListener("click", () => {
-    $("#topic-detail").classList.add("hidden");
-    $("#topics-card").classList.remove("hidden");
-    $("#topic-create-card").classList.remove("hidden");
-    loadTopics();
-  });
-  $("#topic-run").addEventListener("click", () => runTopicAgent(state.currentTopic));
-  $("#topic-reset").addEventListener("click", async () => {
-    try {
-      const r = await api(
-        `/api/topics/reset?name=${encodeURIComponent(state.currentTopic)}`,
-        { method: "POST" }
-      );
-      toast(
-        `Исключения сняты (${r.removed || 0}) — запустите агента, чтобы собрать посты снова`
-      );
-    } catch (e) {
-      toast(e.message, true);
-    }
-  });
 }
