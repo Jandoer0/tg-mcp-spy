@@ -28,8 +28,9 @@ from db import (
 
 logger = logging.getLogger(__name__)
 
-# Сколько постов за один вызов модели (чтобы не перегружать слабую модель).
-AGENT_BATCH = int(os.environ.get("AGENT_BATCH", "60"))
+# Сколько постов за один вызов модели. Меньше — короче запрос и меньше шанс
+# вылететь по таймауту на слабой модели (для Qwen3:9b большой пакет >120с).
+AGENT_BATCH = int(os.environ.get("AGENT_BATCH", "30"))
 # Максимальная длина текста поста, передаваемая модели.
 POST_EXCERPT_CHARS = int(os.environ.get("AGENT_EXCERPT_CHARS", "600"))
 # Максимальная длина описания темы в промпте (чтобы не раздувать контекст).
@@ -41,7 +42,8 @@ AGENT_RETRIES = int(os.environ.get("AGENT_RETRIES", "2"))
 # Пауза между попытками (сек), растёт линейно (1x, 2x, ...).
 AGENT_RETRY_BACKOFF = float(os.environ.get("AGENT_RETRY_BACKOFF", "1.5"))
 # Таймаут одного запроса к модели (сек) — чтобы Ollama не блокировал интерфейс.
-AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "120.0"))
+# Для рассуждающих/слабых моделей на больших пакетах стоит больше.
+AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 
 
 def _chat(messages: list[dict], temperature: float = 0.0) -> str | None:
@@ -167,11 +169,16 @@ def _build_messages(topic: dict, posts: list[dict]) -> list[dict]:
     ]
 
 
-def match_topic_posts(topic: dict, posts: list[dict]) -> list[int]:
-    """Вернуть 1-based индексы постов, относящихся к теме."""
+def match_topic_posts(topic: dict, posts: list[dict], content: str | None = None) -> list[int]:
+    """Вернуть 1-based индексы постов, относящихся к теме.
+
+    content — уже полученный от модели ответ (чтобы не дёргать модель
+    повторно). Если None — дёрнуть модель самостоятельно.
+    """
     if not posts:
         return []
-    content = _chat(_build_messages(topic, posts))
+    if content is None:
+        content = _chat(_build_messages(topic, posts))
     obj = _extract_json(content)
     if not obj:
         return []
@@ -224,13 +231,23 @@ def run_topic_agent(
         if not candidates:
             break
         scanned_total += len(candidates)
+        # Один вызов модели на пачку. При таймауте/ошибке content будет None.
         try:
-            matched_idx = match_topic_posts(topic, candidates)
+            content = _chat(_build_messages(topic, candidates))
         except Exception as e:
             error = str(e)
             logger.error("Ошибка модели для темы %s: %s", topic.get("name"), e)
-            matched_idx = []
-        # Пропускаем посты, которые пользователь вручную исключил из темы:
+            content = None
+        if content is None:
+            # Нет ответа модели — НЕ сдвигаем high-water mark, чтобы эту пачку
+            # можно было повторить в следующем прогоне (иначе посты потеряются).
+            logger.warning(
+                "Агент по теме %s: нет ответа модели, пачка пропущена (повтор при следующем запуске)",
+                topic.get("name"),
+            )
+            break
+        matched_idx = match_topic_posts(topic, candidates, content)
+        # Пропускаем посты, которые пользователь вручно исключил из темы:
         # агент не должен возвращать их обратно без явного сброса.
         excluded = get_excluded_ids(topic["id"], [p["id"] for p in candidates])
         # Модель *присваивает тег* релевантным постам (mode='ai'); само
