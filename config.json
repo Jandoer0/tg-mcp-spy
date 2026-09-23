@@ -1,6 +1,6 @@
 {
   "provider": "ollama",
-  "model": "ornith-1.5:9b-128k",
+  "model": "qwen3:4b",
   "systemPrompt": "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли каждый пост из списка к заданной теме. Отвечай только JSON, без пояснений и аналитики.",
   "schedule": {
     "enabled": true,
@@ -16,7 +16,7 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "jsonObjectFormat": true,
-        "disableThinking": false
+        "disableThinking": true
       }
     }
   }

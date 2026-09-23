@@ -172,14 +172,14 @@ mcp_servers:
 ```json
 {
   "provider": "ollama",
-  "model": "ornith-1.5:9b-128k",
+  "model": "qwen3:4b",
   "schedule": { "enabled": true, "feedRefreshMinutes": 60, "topicMinutes": 1440 },
   "providers": {
     "ollama": {
       "baseUrl": "http://host.containers.internal:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
-      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false, "jsonObjectFormat": true, "disableThinking": false }
+      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false, "jsonObjectFormat": true, "disableThinking": true }
     }
   }
 }
