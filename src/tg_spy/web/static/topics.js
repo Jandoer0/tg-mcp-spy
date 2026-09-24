@@ -129,7 +129,9 @@ export async function loadConfig() {
     const tzSel = document.getElementById("cfg-timezone");
     if (tzSel) tzSel.value = state.timezone || "";
     // Подгрузить список моделей по сохранённому адресу (если он задан).
-    fetchModels(false);
+    await fetchModels(false);
+    const modelSel = document.getElementById("cfg-model");
+    if (modelSel && cfg.model) modelSel.value = cfg.model;
   } catch (_e) {
     /* конфиг недоступен — поля останутся пустыми */
   }
@@ -181,15 +183,17 @@ async function fetchModels(notify = true) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ baseUrl, apiKey }),
     });
-    const list = document.getElementById("model-list");
+    const sel = document.getElementById("cfg-model");
     if (r.ok && Array.isArray(r.models) && r.models.length) {
-      list.innerHTML = r.models.map((m) => `<option value="${escapeHtml(m)}">`).join("");
+      sel.innerHTML =
+        '<option value="">— выберите модель —</option>' +
+        r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
       if (notify) {
-        st.textContent = `Найдено моделей: ${r.models.length}. Выберите из списка или введите вручную.`;
+        st.textContent = `Найдено моделей: ${r.models.length}. Выберите из списка.`;
         toast("Список моделей обновлён");
       }
     } else {
-      list.innerHTML = "";
+      sel.innerHTML = '<option value="">модели не найдены</option>';
       if (notify) st.textContent = "Модели не найдены: " + (r.error || "пусто");
     }
   } catch (e) {

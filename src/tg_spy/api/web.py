@@ -43,7 +43,11 @@ async def root_redirect(request: Request) -> RedirectResponse:
 
 
 async def ui_index(request: Request) -> HTMLResponse:
-    return HTMLResponse((WEB_DIR / "index.html").read_text(encoding="utf-8"))
+    # no-cache — иначе браузер долго держит старые JS/CSS и правки не видны.
+    return HTMLResponse(
+        (WEB_DIR / "index.html").read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 async def static_handler(request: Request) -> FileResponse:
@@ -52,7 +56,8 @@ async def static_handler(request: Request) -> FileResponse:
     candidate = (WEB_DIR / rel).resolve()
     if not str(candidate).startswith(str(WEB_DIR.resolve())) or not candidate.is_file():
         raise HTTPException(status_code=404, detail="not found")
-    return FileResponse(str(candidate))
+    # no-cache — статику пересобираем в образе; пусть браузер всегда ревалидирует.
+    return FileResponse(str(candidate), headers={"Cache-Control": "no-cache"})
 
 
 # --------------------------------------------------------------------------- #
