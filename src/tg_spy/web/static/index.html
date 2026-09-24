@@ -140,30 +140,33 @@
             <span class="field-label">Модель</span>
             <input name="model" list="model-list" placeholder="выберите из списка или введите вручную" autocomplete="off" />
             <datalist id="model-list"></datalist>
-            <button type="button" id="config-fetch-models" class="ghost small">Получить список моделей</button>
           </label>
           <label class="field">
             <span class="field-label">API-ключ (оставьте «ollama» для локальной модели)</span>
             <input name="apiKey" placeholder="ollama" />
           </label>
-          <label class="field">
-            <span class="field-label">Часовой пояс (для отображения времени запуска агента)</span>
-            <select name="timezone" id="cfg-timezone"></select>
-          </label>
-          <div class="field">
-            <span class="field-label">Возможности модели</span>
-            <div class="checks">
-              <label><input type="checkbox" id="cfg-dev" /> Поддерживает роль developer (system)</label>
-              <label><input type="checkbox" id="cfg-json" /> Ответ в формате JSON</label>
-              <label><input type="checkbox" id="cfg-think" /> Отключить режим рассуждений (think:false)</label>
-            </div>
-          </div>
           <div class="provider-actions">
             <button type="submit" id="config-save">Сохранить</button>
             <button type="button" id="config-test" class="ghost">Проверить соединение</button>
           </div>
         </form>
         <p class="config-status" id="config-status"></p>
+      </div>
+
+      <div class="card" id="tz-card">
+        <h2>Настройка часового пояса</h2>
+        <p class="hint">Часовой пояс для отображения времени запуска агента в «Мои темы».
+          «Авто» — местное время браузера.</p>
+        <form id="form-timezone" class="provider-form">
+          <label class="field">
+            <span class="field-label">Часовой пояс</span>
+            <select name="timezone" id="cfg-timezone"></select>
+          </label>
+          <div class="provider-actions">
+            <button type="submit" id="config-save-tz">Сохранить</button>
+          </div>
+        </form>
+        <p class="config-status" id="tz-status"></p>
       </div>
     </section>
   </main>

@@ -123,10 +123,6 @@ export async function loadConfig() {
     card.querySelector("[name=baseUrl]").value = prov.baseUrl || "";
     card.querySelector("[name=model]").value = cfg.model || "";
     card.querySelector("[name=apiKey]").value = prov.apiKey || "";
-    const compat = prov.compat || {};
-    document.getElementById("cfg-dev").checked = !!compat.supportsDeveloperRole;
-    document.getElementById("cfg-json").checked = !!compat.jsonObjectFormat;
-    document.getElementById("cfg-think").checked = !!compat.disableThinking;
     // Часовой пояс для отображения времени (пусто = локальное время браузера).
     state.timezone = (cfg && cfg.timezone) || "";
     populateTimezones();
@@ -209,16 +205,10 @@ async function saveConfig(e) {
   const payload = {
     provider: "ollama",
     model: card.querySelector("[name=model]").value.trim(),
-    timezone: card.querySelector("[name=timezone]").value || "",
     providers: {
       ollama: {
         baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
         apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
-        compat: {
-          supportsDeveloperRole: document.getElementById("cfg-dev").checked,
-          jsonObjectFormat: document.getElementById("cfg-json").checked,
-          disableThinking: document.getElementById("cfg-think").checked,
-        },
       },
     },
   };
@@ -318,9 +308,40 @@ export function initTopics() {
   });
 
   const cfgForm = document.getElementById("form-provider");
-  const cfgFetch = document.getElementById("config-fetch-models");
   const cfgTest = document.getElementById("config-test");
   if (cfgForm) cfgForm.addEventListener("submit", saveConfig);
-  if (cfgFetch) cfgFetch.addEventListener("click", () => fetchModels(true));
-  if (cfgTest) cfgTest.addEventListener("click", testConfig);
+  // «Проверить соединение» теперь и проверяет связь, и подгружает список моделей.
+  if (cfgTest)
+    cfgTest.addEventListener("click", async () => {
+      await testConfig();
+      await fetchModels(true);
+    });
+
+  // Отдельная карточка «Настройка часового пояса».
+  const tzForm = document.getElementById("form-timezone");
+  const tzStatus = document.getElementById("tz-status");
+  if (tzForm)
+    tzForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const tz = tzForm.querySelector("[name=timezone]").value || "";
+      try {
+        await api("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timezone: tz }),
+        });
+        state.timezone = tz;
+        tzStatus.className = "config-status ok";
+        tzStatus.textContent = "Сохранено. Применяется сразу.";
+        toast("Часовой пояс сохранён");
+      } catch (err) {
+        tzStatus.className = "config-status err";
+        tzStatus.textContent = "Ошибка: " + err.message;
+        toast(err.message, true);
+      }
+    });
+
+  // Подстраховка: заполнить <select> часовых поясов при загрузке (карточка
+  // может находиться во вкладке, которая ещё не открывалась).
+  populateTimezones();
 }
