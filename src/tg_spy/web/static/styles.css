@@ -246,7 +246,7 @@
     .tf-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text);
       cursor: pointer; width: 100%; box-sizing: border-box; padding: 8px 12px; }
     .tf-row:hover { background: var(--surface-2); }
-    .tf-row input { width: auto; }
+    .tf-row input { flex: 0 0 auto; width: auto; margin: 0; }
     .tf-all { font-weight: 600; border-bottom: 1px solid var(--border);
       padding: 8px 12px; margin: 0; }
 
