@@ -46,6 +46,31 @@ function closeAddMenu() {
 function _outsideAdd(e) {
   if (addMenuEl && !addMenuEl.contains(e.target)) closeAddMenu();
 }
+
+// Добавить/убрать usertag-чип темы прямо на карточке поста (без перезагрузки ленты).
+function addUsertag(el, t) {
+  let box = el.querySelector(".post-tags");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "post-tags";
+    el.appendChild(box);
+  }
+  const exists = [...box.querySelectorAll(".usertag")].some((s) => s.textContent === t.tag);
+  if (!exists) {
+    const span = document.createElement("span");
+    span.className = "usertag";
+    span.title = `тема: ${t.name}`;
+    span.textContent = t.tag;
+    box.appendChild(span);
+  }
+}
+
+function removeUsertag(el, tag) {
+  el.querySelectorAll(".post-tags .usertag").forEach((s) => {
+    if (s.textContent === tag) s.remove();
+  });
+}
+
 export function toggleAddMenu(el, postId) {
   if (addMenuEl) {
     closeAddMenu();
@@ -57,7 +82,7 @@ export function toggleAddMenu(el, postId) {
   menu.className = "addmenu-pop addmenu-list";
   const title = document.createElement("div");
   title.className = "addmenu-title";
-  title.textContent = "Добавить пост в тему:";
+  title.textContent = "Добавить или убрать пост из темы:";
   menu.appendChild(title);
   if (!state.allTopics.length) {
     const empty = document.createElement("div");
@@ -65,22 +90,44 @@ export function toggleAddMenu(el, postId) {
     empty.textContent = "Сначала создайте тему во вкладке «Мои темы».";
     menu.appendChild(empty);
   } else {
+    // Текущие теги поста (из уже отрисованных usertag-чипов) — чтобы
+    // показать, в какие темы пост уже добавлен, и сделать меню переключающим.
+    const current = new Set(
+      [...el.querySelectorAll(".post-tags .usertag")].map((s) => s.textContent)
+    );
     const list = document.createElement("div");
     list.className = "addmenu-items";
     for (const t of state.allTopics) {
+      const added = current.has(t.tag);
       const item = document.createElement("button");
       item.type = "button";
-      item.className = "addmenu-item";
-      item.innerHTML = `<span class="ai-name">${escapeHtml(t.name)}</span><span class="ai-tag">${escapeHtml(t.tag)}</span>`;
+      item.className = "addmenu-item" + (added ? " added" : "");
+      item.innerHTML =
+        `<span class="ai-name">${escapeHtml(t.name)}</span>` +
+        `<span class="ai-tag">${escapeHtml(t.tag)}</span>` +
+        `<span class="ai-state"></span>`;
       item.addEventListener("click", async (ev) => {
         ev.stopPropagation();
+        const isAdded = item.classList.contains("added");
         try {
-          await api(`/api/topics/posts?name=${encodeURIComponent(t.name)}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ post_id: postId }),
-          });
-          toast(`Добавлено в «${t.name}»`);
+          if (!isAdded) {
+            await api(`/api/topics/posts?name=${encodeURIComponent(t.name)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ post_id: postId }),
+            });
+            addUsertag(el, t);
+            item.classList.add("added");
+            toast(`Добавлено в «${t.name}»`);
+          } else {
+            await api(
+              `/api/topics/posts?name=${encodeURIComponent(t.name)}&post_id=${encodeURIComponent(postId)}`,
+              { method: "DELETE" }
+            );
+            removeUsertag(el, t.tag);
+            item.classList.remove("added");
+            toast(`Убрано из «${t.name}»`);
+          }
           closeAddMenu();
         } catch (err) {
           toast(err.message, true);

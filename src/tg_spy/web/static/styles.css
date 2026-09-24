@@ -220,7 +220,10 @@
       padding: 8px 10px; border-radius: 9px; cursor: pointer; box-shadow: none; }
     .addmenu-item:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
     .addmenu-item .ai-name { font-weight: 600; font-size: 14px; }
-    .addmenu-item .ai-tag { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+    .addmenu-item .ai-tag { color: var(--text-muted); font-size: 12px; }
+    .addmenu-item .ai-state { margin-left: auto; font-weight: 700; }
+    .addmenu-item.added { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+    .addmenu-item.added .ai-state::after { content: "✓"; color: var(--accent); }
 
     /* Теги пользователя (темы) внизу карточки поста */
     .post-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -237,16 +240,15 @@
       border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
       max-width: 280px; box-shadow: none; }
     .tag-filter-pop { position: absolute; z-index: 200; top: calc(100% + 6px); left: 0;
-      display: flex; flex-direction: column; gap: 4px; padding: 10px;
+      display: flex; flex-direction: column; gap: 2px; padding: 8px;
       border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface);
-      box-shadow: var(--shadow); min-width: 260px; max-height: 340px; overflow-y: auto; }
+      box-shadow: var(--shadow); min-width: 220px; max-height: 340px; overflow-y: auto; }
     .tf-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text);
-      cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+      cursor: pointer; margin: 0 -8px; padding: 6px 8px; border-radius: 8px; }
     .tf-row:hover { background: var(--surface-2); }
     .tf-row input { width: auto; }
-    .tf-all { font-weight: 600; border-bottom: 1px solid var(--border); border-radius: 0; margin-bottom: 2px;
-      padding-bottom: 6px; }
-    .tf-hint { font-size: 11px; color: var(--text-muted); padding: 2px 6px 0; }
+    .tf-all { font-weight: 600; border-bottom: 1px solid var(--border); border-radius: 0;
+      margin: 0 -8px 4px; padding: 6px 8px; }
 
     /* Настройки провайдера ИИ — аккуратный столбик */
     .provider-form { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
