@@ -36,7 +36,6 @@ class ProviderCompat(BaseModel):
     """Особенности конкретного провайдера/модели (флаги совместимости)."""
 
     supports_developer_role: bool = False
-    supports_reasoning_effort: bool = False
     json_object_format: bool = False
     disable_thinking: bool = False
 
@@ -61,6 +60,7 @@ class AppConfig(BaseModel):
 
     provider: str = "ollama"
     model: str = "qwen3:4b"
+    timezone: str = ""  # IANA-зона для отображения времени; "" = локальное время браузера
     system_prompt: str = (
         "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли "
         "каждый пост из списка к заданной теме. Отвечай только JSON, "
@@ -83,7 +83,6 @@ class AppConfig(BaseModel):
                 "apiKey": p["api_key"],
                 "compat": {
                     "supportsDeveloperRole": compat["supports_developer_role"],
-                    "supportsReasoningEffort": compat["supports_reasoning_effort"],
                     "jsonObjectFormat": compat["json_object_format"],
                     "disableThinking": compat["disable_thinking"],
                 },
@@ -91,6 +90,7 @@ class AppConfig(BaseModel):
         return {
             "provider": d["provider"],
             "model": d["model"],
+            "timezone": d.get("timezone", ""),
             "systemPrompt": d["system_prompt"],
             "schedule": {
                 "enabled": d["schedule"]["enabled"],
@@ -112,7 +112,6 @@ class AppConfig(BaseModel):
                 api_key=p.get("apiKey", "ollama"),
                 compat=ProviderCompat(
                     supports_developer_role=bool(compat.get("supportsDeveloperRole")),
-                    supports_reasoning_effort=bool(compat.get("supportsReasoningEffort")),
                     json_object_format=bool(compat.get("jsonObjectFormat")),
                     disable_thinking=bool(compat.get("disableThinking")),
                 ),
@@ -121,6 +120,7 @@ class AppConfig(BaseModel):
         return cls(
             provider=data.get("provider", "ollama"),
             model=data.get("model", "qwen3:4b"),
+            timezone=data.get("timezone", ""),
             system_prompt=data.get(
                 "systemPrompt",
                 "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли "

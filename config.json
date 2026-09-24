@@ -14,7 +14,6 @@
       "apiKey": "ollama",
       "compat": {
         "supportsDeveloperRole": false,
-        "supportsReasoningEffort": false,
         "jsonObjectFormat": true,
         "disableThinking": true
       }

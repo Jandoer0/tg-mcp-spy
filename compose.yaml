@@ -1,9 +1,9 @@
 # Локальный запуск через podman compose (порт 8090).
-# Сборка образа из исходников прямо на этом хосте (запасной вариант).
+# Образ собирается на GitHub (.github/workflows/build.yml) и публикуется
+# в GHCR — здесь он просто подтягивается готовым (без локальной сборки).
 services:
   tg-mcp-spy:
-    build: .
-    image: tg-mcp-spy:local
+    image: ghcr.io/jandoer0/tg-mcp-spy:latest
     container_name: tg-mcp-spy
     ports:
       - "8090:8000"

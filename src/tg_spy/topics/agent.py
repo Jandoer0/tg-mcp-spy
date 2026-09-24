@@ -270,41 +270,64 @@ def run_topic_agent_async(
     threading.Thread(target=_t, name="topic-agent", daemon=True).start()
 
 
-def list_models(base_url: str, api_key: str) -> dict:
-    """Запросить у провайдера список доступных моделей (OpenAI-совместимый /models).
+def _names_from_openai(data) -> list[str]:
+    """Извлечь имена моделей из ответа OpenAI-совместимого /models."""
+    out: list[str] = []
+    items = data.get("data") if isinstance(data, dict) else data
+    if isinstance(items, list):
+        for m in items:
+            if isinstance(m, dict):
+                name = m.get("id") or m.get("name") or m.get("model")
+                if name:
+                    out.append(str(name))
+    return out
 
-    Используется в настройках провайдера: пользователь вводит URL, сайт
-    опрашивает провайдера и подставляет список моделей в поле выбора.
+
+def list_models(base_url: str, api_key: str) -> dict:
+    """Запросить у провайдера список доступных моделей.
+
+    Сначала пробуем OpenAI-совместимый /models, при неудаче или пустом
+    ответе — нативный Ollama /api/tags (провайдер сам выбирает порт).
+    Используется в настройках провайдера: сайт опрашивает провайдера и
+    подставляет список моделей в поле выбора.
     """
     base = (base_url or "").strip().rstrip("/")
     if not base:
         return {"ok": False, "error": "Не указан адрес провайдера (API URL)"}
-    url = f"{base}/models"
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    try:
-        resp = httpx.get(url, headers=headers, timeout=15.0)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"Не удалось получить список моделей: {e}"}
+
     models: list[str] = []
-    raw = data.get("data") if isinstance(data, dict) else None
-    if isinstance(raw, list):
-        for m in raw:
-            if isinstance(m, dict):
-                name = m.get("id") or m.get("name") or m.get("model")
-                if name:
-                    models.append(str(name))
-    elif isinstance(data, list):
-        for m in data:
-            if isinstance(m, dict):
-                name = m.get("id") or m.get("name") or m.get("model")
-                if name:
-                    models.append(str(name))
-    models = sorted(set(models))
-    return {"ok": True, "models": models}
+    last_err = None
+
+    # 1) OpenAI-совместимый эндпоинт /models.
+    try:
+        resp = httpx.get(f"{base}/models", headers=headers, timeout=15.0)
+        if resp.status_code == 200:
+            models = _names_from_openai(resp.json())
+    except Exception as e:  # noqa: BLE001
+        last_err = e
+
+    # 2) Фолбэк на нативный Ollama /api/tags (если /models пуст или недоступен).
+    if not models:
+        try:
+            root = base[:-3] if base.endswith("/v1") else base
+            resp = httpx.get(f"{root}/api/tags", headers=headers, timeout=15.0)
+            if resp.status_code == 200:
+                models = [
+                    str(m["name"])
+                    for m in resp.json().get("models", [])
+                    if isinstance(m, dict) and m.get("name")
+                ]
+        except Exception as e:  # noqa: BLE001
+            if last_err is None:
+                last_err = e
+
+    models = sorted(set(filter(None, models)))
+    if models:
+        return {"ok": True, "models": models}
+    return {"ok": False, "error": f"Не удалось получить список моделей: {last_err or 'пусто'}"}
 
 
 def test_connection() -> dict:

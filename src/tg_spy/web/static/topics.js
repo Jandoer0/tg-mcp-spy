@@ -2,9 +2,10 @@
 // Кнопка «открыть в ленте» перенаправляет во вкладку «Лента новостей»
 // с включённым фильтром по тегу темы (детальное окно темы убрано).
 
-import { $, api, escapeHtml, renderBody, toast } from "./core.js";
+import { $, api, escapeHtml, formatTs, renderBody, toast } from "./core.js";
 import { state } from "./state.js";
 import { buildPostEl } from "./components.js";
+import { populateTagFilter } from "./posts.js";
 import { switchTab } from "./nav.js";
 
 export async function loadAllTopics() {
@@ -14,22 +15,6 @@ export async function loadAllTopics() {
     state.allTopics = [];
   }
   populateTagFilter();
-}
-
-// Заполнить выпадающее меню тегов (фильтр в «Ленте новостей»).
-export function populateTagFilter() {
-  const sel = document.getElementById("tag-filter");
-  if (!sel) return;
-  const cur = state.currentTag;
-  sel.innerHTML =
-    '<option value="">None</option>' +
-    state.allTopics
-      .map(
-        (t) =>
-          `<option value="${escapeHtml(t.tag)}">${escapeHtml(t.tag)} (${escapeHtml(t.name)})</option>`
-      )
-      .join("");
-  sel.value = cur;
 }
 
 export async function loadTopics() {
@@ -45,13 +30,14 @@ export async function loadTopics() {
     for (const t of state.allTopics) {
       const el = document.createElement("div");
       el.className = "topic";
+      el.dataset.name = t.name;
       const active = t.active ? "активна" : "выкл.";
       el.innerHTML = `
         <div class="t-top">
           <span class="t-name">${escapeHtml(t.name)}</span>
           <span class="t-tag">тег: ${escapeHtml(t.tag)}</span>
-          <span class="t-meta">${active} · постов: ${t.posts_count || 0}<br>${
-        t.last_run_at ? "запуск: " + escapeHtml(t.last_run_at) : "ещё не запускался"
+          <span class="t-meta">${active} · <span class="t-count">постов: ${t.posts_count || 0}</span><br>${
+        t.last_run_at ? "запуск: " + escapeHtml(formatTs(t.last_run_at, state.timezone)) : "ещё не запускался"
       }</span>
         </div>
         ${t.description ? `<div class="t-desc">${escapeHtml(t.description)}</div>` : ""}
@@ -120,13 +106,11 @@ export async function runTopicAgent(name) {
 }
 
 export async function openTopicInLenta(tag) {
-  // Перейти на вкладку «Лента новостей» с включённым фильтром по тегу темы.
-  state.currentTag = tag || "";
+  // Перейти на вкладку «Лента новостей» с фильтром по тегу темы.
+  state.currentTags = tag ? [tag] : [];
   state.currentSource = "";
   state.currentKind = "";
-  const tf = document.getElementById("tag-filter");
-  if (tf) tf.value = state.currentTag;
-  switchTab("posts");
+  switchTab("posts"); // populateTagFilter + loadPosts учтут выбранный тег
 }
 
 // ----- Настройки провайдера / модели ИИ -----
@@ -141,14 +125,46 @@ export async function loadConfig() {
     card.querySelector("[name=apiKey]").value = prov.apiKey || "";
     const compat = prov.compat || {};
     document.getElementById("cfg-dev").checked = !!compat.supportsDeveloperRole;
-    document.getElementById("cfg-reason").checked = !!compat.supportsReasoningEffort;
     document.getElementById("cfg-json").checked = !!compat.jsonObjectFormat;
     document.getElementById("cfg-think").checked = !!compat.disableThinking;
+    // Часовой пояс для отображения времени (пусто = локальное время браузера).
+    state.timezone = (cfg && cfg.timezone) || "";
+    populateTimezones();
+    const tzSel = document.getElementById("cfg-timezone");
+    if (tzSel) tzSel.value = state.timezone || "";
     // Подгрузить список моделей по сохранённому адресу (если он задан).
     fetchModels(false);
   } catch (_e) {
     /* конфиг недоступен — поля останутся пустыми */
   }
+}
+
+// Заполнить <select> часовых поясов (один раз).
+function populateTimezones() {
+  const sel = document.getElementById("cfg-timezone");
+  if (!sel || sel.options.length) return;
+  const common = [
+    "UTC", "Europe/Kaliningrad", "Europe/Moscow", "Europe/Kiev",
+    "Europe/Berlin", "Europe/London",
+    "Asia/Yekaterinburg", "Asia/Novosibirsk", "Asia/Krasnoyarsk",
+    "Asia/Irkutsk", "Asia/Vladivostok", "Asia/Sakhalin", "Asia/Magadan",
+    "Asia/Almaty", "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata",
+    "Australia/Sydney", "America/New_York", "America/Los_Angeles",
+  ];
+  const browserTz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || "";
+  const opts = [{ v: "", label: "Авто (время браузера)" }];
+  const seen = new Set([""]);
+  if (browserTz && !common.includes(browserTz)) {
+    opts.push({ v: browserTz, label: `Браузер — ${browserTz}` });
+    seen.add(browserTz);
+  }
+  for (const z of common) {
+    if (seen.has(z)) continue;
+    opts.push({ v: z, label: z });
+  }
+  sel.innerHTML = opts
+    .map((o) => `<option value="${escapeHtml(o.v)}">${escapeHtml(o.label)}</option>`)
+    .join("");
 }
 
 // Опросить провайдера и заполнить <datalist> моделями.
@@ -182,6 +198,7 @@ async function fetchModels(notify = true) {
     }
   } catch (e) {
     if (notify) st.textContent = "Ошибка: " + e.message;
+    else console.warn("Автоподгрузка моделей не удалась:", e);
   }
 }
 
@@ -192,13 +209,13 @@ async function saveConfig(e) {
   const payload = {
     provider: "ollama",
     model: card.querySelector("[name=model]").value.trim(),
+    timezone: card.querySelector("[name=timezone]").value || "",
     providers: {
       ollama: {
         baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
         apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
         compat: {
           supportsDeveloperRole: document.getElementById("cfg-dev").checked,
-          supportsReasoningEffort: document.getElementById("cfg-reason").checked,
           jsonObjectFormat: document.getElementById("cfg-json").checked,
           disableThinking: document.getElementById("cfg-think").checked,
         },
@@ -242,8 +259,38 @@ async function testConfig() {
   }
 }
 
+// Обновить ТОЛЬКО счётчик найденных постов в каждой теме — без перерисовки
+// списка и без запуска агента (и без затрагивания фильтра тегов ленты).
+export async function refreshTopicCounts() {
+  const btn = document.getElementById("refresh-topics");
+  const label = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Обновление…";
+  }
+  try {
+    const topics = await api("/api/topics");
+    const byName = {};
+    for (const t of topics) byName[t.name] = t;
+    document.querySelectorAll("#topics .topic").forEach((card) => {
+      const t = byName[card.dataset.name];
+      if (!t) return;
+      const c = card.querySelector(".t-count");
+      if (c) c.textContent = `постов: ${t.posts_count || 0}`;
+    });
+    toast("Счётчики найденных постов обновлены");
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+}
+
 export function initTopics() {
-  $("#refresh-topics").addEventListener("click", () => loadTopics());
+  $("#refresh-topics").addEventListener("click", () => refreshTopicCounts());
 
   $("#form-topic").addEventListener("submit", async (e) => {
     e.preventDefault();

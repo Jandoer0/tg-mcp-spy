@@ -52,7 +52,14 @@
           <button class="chip" data-kind="telegram">Telegram</button>
           <button class="chip" data-kind="rss">RSS</button>
           <span class="filter-sep"></span>
-          <select id="tag-filter" class="tag-filter-select"><option value="">None</option></select>
+          <div class="tag-filter" id="tag-filter">
+            <button type="button" id="tag-filter-btn" class="tag-filter-select" aria-haspopup="true" aria-expanded="false">Теги: все</button>
+            <div id="tag-filter-pop" class="tag-filter-pop hidden" role="menu">
+              <label class="tf-row tf-all"><input type="checkbox" id="tag-filter-all" checked /> Все теги</label>
+              <div id="tag-filter-list"></div>
+              <div class="tf-hint">Несколько тегов → посты, отмеченные всеми ими (логическое И)</div>
+            </div>
+          </div>
           <button class="chip" id="chip-clear-source" data-kind="__clear_source" style="display:none;">✕ Сбросить фильтр</button>
         </div>
         <div id="posts" class="posts">Загрузка…</div>
@@ -139,11 +146,14 @@
             <span class="field-label">API-ключ (оставьте «ollama» для локальной модели)</span>
             <input name="apiKey" placeholder="ollama" />
           </label>
+          <label class="field">
+            <span class="field-label">Часовой пояс (для отображения времени запуска агента)</span>
+            <select name="timezone" id="cfg-timezone"></select>
+          </label>
           <div class="field">
             <span class="field-label">Возможности модели</span>
             <div class="checks">
               <label><input type="checkbox" id="cfg-dev" /> Поддерживает роль developer (system)</label>
-              <label><input type="checkbox" id="cfg-reason" /> Поддерживает уровень рассуждений (reasoning effort)</label>
               <label><input type="checkbox" id="cfg-json" /> Ответ в формате JSON</label>
               <label><input type="checkbox" id="cfg-think" /> Отключить режим рассуждений (think:false)</label>
             </div>

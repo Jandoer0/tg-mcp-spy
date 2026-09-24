@@ -23,6 +23,7 @@ from ..db import (
     add_source,
     get_posts,
     get_posts_by_tag,
+    get_posts_by_tags,
     get_source,
     list_sources,
 )
@@ -102,16 +103,41 @@ async def api_posts(request: Request) -> JSONResponse:
     source = request.query_params.get("source", "").strip().lower().lstrip("@")
     kind = request.query_params.get("kind", "").strip().lower()
     tag = request.query_params.get("tag", "").strip()
+    tags_raw = request.query_params.get("tags", "").strip()
     if kind not in ("telegram", "rss"):
         kind = ""
     try:
-        limit = int(request.query_params.get("limit", "300"))
+        limit = int(request.query_params.get("limit", "50"))
     except ValueError:
-        limit = 300
-    limit = max(1, min(limit, 1000))
+        limit = 50
+    limit = max(1, min(limit, 200))
+    try:
+        offset = int(request.query_params.get("offset", "0"))
+    except ValueError:
+        offset = 0
+    offset = max(0, offset)
+
+    # Фильтр по нескольким тегам (логическое И): посты, отмеченные всеми ими.
+    if tags_raw:
+        tag_list = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        if tag_list:
+            rows = get_posts_by_tags(tag_list, limit, offset)
+            return JSONResponse(
+                {
+                    "global": True,
+                    "tags": tag_list,
+                    "posts": [
+                        {
+                            "id": p["id"], "date": p["date"], "text": p["text"],
+                            "url": p["url"], "source": p["source"], "kind": p["kind"],
+                        }
+                        for p in rows
+                    ],
+                }
+            )
 
     if tag:
-        rows = get_posts_by_tag(tag, limit)
+        rows = get_posts_by_tag(tag, limit, offset)
         return JSONResponse(
             {
                 "global": True,
@@ -130,7 +156,7 @@ async def api_posts(request: Request) -> JSONResponse:
         src = get_source(source)
         if not src:
             return JSONResponse({"error": "Подписка не найдена"}, status_code=404)
-        rows = get_posts([src["id"]], "1970-01-01")[:limit]
+        rows = get_posts([src["id"]], "1970-01-01", limit, offset)
         return JSONResponse(
             {
                 "source": source, "kind": src["kind"], "global": False,
@@ -142,7 +168,7 @@ async def api_posts(request: Request) -> JSONResponse:
         )
 
     srcs = list_sources(kind) if kind else list_sources()
-    rows = get_posts([s["id"] for s in srcs], "1970-01-01")[:limit]
+    rows = get_posts([s["id"] for s in srcs], "1970-01-01", limit, offset)
     return JSONResponse(
         {
             "global": True, "kind": kind,
@@ -305,6 +331,9 @@ async def api_config(request: Request) -> JSONResponse:
     for k in ("provider", "model", "systemPrompt"):
         if data.get(k) not in (None, ""):
             cur[k] = data[k]
+    # Часовой пояс: пустая строка = «авто (время браузера)», допустимо сохранять.
+    if "timezone" in data:
+        cur["timezone"] = data["timezone"] or ""
     sched = data.get("schedule")
     if isinstance(sched, dict):
         cur.setdefault("schedule", {})

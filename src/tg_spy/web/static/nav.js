@@ -1,8 +1,8 @@
 // Переключение вкладок и проводка кнопок навигации.
 
 import { $ } from "./core.js";
-import { loadPosts } from "./posts.js";
-import { loadConfig, loadTopics, loadAllTopics, populateTagFilter } from "./topics.js";
+import { loadPosts, populateTagFilter } from "./posts.js";
+import { loadConfig, loadTopics, loadAllTopics } from "./topics.js";
 
 export function switchTab(tab) {
   document.querySelectorAll(".tab").forEach((t) =>

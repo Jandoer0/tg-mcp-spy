@@ -1,4 +1,6 @@
 // Вкладка «Лента новостей»: загрузка/фильтрация постов, обновление.
+// Поддерживает бесконечную прокрутку (первые N, догрузка при скролле)
+// и фильтр по нескольким тегам (логическое И — посты со всеми тегами).
 
 import { $, api, escapeHtml, toast } from "./core.js";
 import { state } from "./state.js";
@@ -22,40 +24,72 @@ export function syncChips() {
   );
 }
 
-function _clearTagFilter() {
-  state.currentTag = "";
-  const tf = document.getElementById("tag-filter");
-  if (tf) tf.value = "";
+// Построить строку запроса к /api/posts с учётом текущего фильтра и пагинации.
+function postsParams() {
+  const params = new URLSearchParams();
+  if (state.currentTags.length) {
+    params.set("tags", state.currentTags.join(","));
+  } else if (state.currentSource) {
+    params.set("source", state.currentSource);
+  } else if (state.currentKind) {
+    params.set("kind", state.currentKind);
+  }
+  params.set("offset", String(state.postsOffset));
+  params.set("limit", String(state.postsLimit));
+  return params.toString();
 }
 
-export async function loadPosts() {
+export async function loadPosts(reset = true) {
+  if (reset) {
+    state.postsOffset = 0;
+    state.postsHasMore = true;
+  }
   updateSourceLabel();
   const box = $("#posts");
-  box.innerHTML = "Загрузка…";
-  let path;
-  if (state.currentTag) {
-    path = `/api/posts?tag=${encodeURIComponent(state.currentTag)}`;
-  } else if (state.currentSource) {
-    path = `/api/posts?source=${encodeURIComponent(state.currentSource)}`;
-  } else if (state.currentKind) {
-    path = `/api/posts?kind=${encodeURIComponent(state.currentKind)}`;
-  } else {
-    path = "/api/posts";
-  }
+  if (reset) box.innerHTML = "Загрузка…";
   try {
-    const data = await api(path);
-    if (!data.posts.length) {
-      box.innerHTML =
-        '<div class="empty">Постов пока нет. Нажмите «Свежие за 24ч», чтобы подтянуть новости.</div>';
-      return;
+    const data = await api("/api/posts?" + postsParams());
+    if (reset) {
+      if (!data.posts.length) {
+        box.innerHTML =
+          '<div class="empty">Постов пока нет. Нажмите «Свежие за 24ч», чтобы подтянуть новости.</div>';
+        state.postsHasMore = false;
+        return;
+      }
+      box.innerHTML = "";
     }
-    box.innerHTML = "";
     const frag = document.createDocumentFragment();
     for (const p of data.posts) frag.appendChild(buildPostEl(p));
     box.appendChild(frag);
     await decoratePostTags(box, data.posts);
+    state.postsOffset += data.posts.length;
+    state.postsHasMore = data.posts.length === state.postsLimit;
   } catch (e) {
-    box.innerHTML = `<div class="empty">${e.message}</div>`;
+    if (reset) box.innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+// Подгрузить следующую страницу и дописать в конец (бесконечная прокрутка).
+async function loadMorePosts() {
+  if (state.postsLoading || !state.postsHasMore) return;
+  state.postsLoading = true;
+  const box = $("#posts");
+  try {
+    const data = await api("/api/posts?" + postsParams());
+    if (!data.posts.length) {
+      state.postsHasMore = false;
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const p of data.posts) frag.appendChild(buildPostEl(p));
+    box.appendChild(frag);
+    await decoratePostTags(box, data.posts);
+    state.postsOffset += data.posts.length;
+    state.postsHasMore = data.posts.length === state.postsLimit;
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    state.postsLoading = false;
   }
 }
 
@@ -92,7 +126,9 @@ async function decoratePostTags(box, posts) {
 export async function prependFresh() {
   const box = $("#posts");
   let path;
-  if (state.currentSource) {
+  if (state.currentTags.length) {
+    path = `/api/posts?tags=${encodeURIComponent(state.currentTags.join(","))}`;
+  } else if (state.currentSource) {
     path = `/api/posts?source=${encodeURIComponent(state.currentSource)}`;
   } else if (state.currentKind) {
     path = `/api/posts?kind=${encodeURIComponent(state.currentKind)}`;
@@ -112,6 +148,70 @@ export async function prependFresh() {
   if (empty) empty.remove();
   await decoratePostTags(box, fresh);
   return fresh.length;
+}
+
+// ----- Фильтр по тегам (выпадающий список с возможностью выбрать несколько) -----
+export function populateTagFilter() {
+  const list = document.getElementById("tag-filter-list");
+  if (!list) return;
+  list.innerHTML = state.allTopics
+    .map(
+      (t) =>
+        `<label class="tf-row"><input type="checkbox" value="${escapeHtml(t.tag)}" ${
+          state.currentTags.includes(t.tag) ? "checked" : ""
+        }/> ${escapeHtml(t.tag)} (${escapeHtml(t.name)})</label>`
+    )
+    .join("");
+  const all = document.getElementById("tag-filter-all");
+  if (all) all.checked = state.currentTags.length === 0;
+  updateTagFilterLabel();
+}
+
+function updateTagFilterLabel() {
+  const btn = document.getElementById("tag-filter-btn");
+  if (!btn) return;
+  btn.textContent = state.currentTags.length
+    ? "Теги: " + state.currentTags.join(", ")
+    : "Теги: все";
+}
+
+function syncTagFilterUI() {
+  const list = document.getElementById("tag-filter-list");
+  if (list) {
+    list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+      cb.checked = state.currentTags.includes(cb.value);
+    });
+  }
+  const all = document.getElementById("tag-filter-all");
+  if (all) all.checked = state.currentTags.length === 0;
+  updateTagFilterLabel();
+}
+
+function _clearTagFilter() {
+  state.currentTags = [];
+  syncTagFilterUI();
+}
+
+// Пересчитать выбранные теги после изменения любого чекбокса фильтра.
+function onTagFilterChange(e) {
+  const all = document.getElementById("tag-filter-all");
+  const list = document.getElementById("tag-filter-list");
+  if (e && e.target === all) {
+    if (all.checked) {
+      list.querySelectorAll("input[type=checkbox]").forEach((cb) => (cb.checked = false));
+    }
+  } else if (all && list) {
+    const anyChecked = [...list.querySelectorAll("input[type=checkbox]:checked")].length > 0;
+    all.checked = !anyChecked;
+  }
+  state.currentTags = all && all.checked
+    ? []
+    : [...list.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value);
+  state.currentSource = "";
+  state.currentKind = "";
+  syncChips();
+  updateTagFilterLabel();
+  loadPosts();
 }
 
 export function initPosts() {
@@ -149,17 +249,27 @@ export function initPosts() {
     })
   );
 
-  // Выпадающее меню тегов — фильтр ленты по тегу темы.
-  const tagFilterEl = document.getElementById("tag-filter");
-  if (tagFilterEl) {
-    tagFilterEl.addEventListener("change", () => {
-      state.currentTag = tagFilterEl.value;
-      state.currentSource = "";
-      state.currentKind = "";
-      syncChips();
-      loadPosts();
+  // Выпадающий список тегов — можно выбрать несколько (фильтр по пересечению тем).
+  const tagWrap = document.getElementById("tag-filter");
+  const tagBtn = document.getElementById("tag-filter-btn");
+  const tagPop = document.getElementById("tag-filter-pop");
+  const tagAll = document.getElementById("tag-filter-all");
+  const tagList = document.getElementById("tag-filter-list");
+  if (tagBtn) {
+    tagBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const hidden = tagPop.classList.toggle("hidden");
+      tagBtn.setAttribute("aria-expanded", String(!hidden));
     });
   }
+  if (tagAll) tagAll.addEventListener("change", onTagFilterChange);
+  if (tagList) tagList.addEventListener("change", onTagFilterChange);
+  document.addEventListener("click", (e) => {
+    if (tagWrap && tagPop && !tagWrap.contains(e.target)) {
+      tagPop.classList.add("hidden");
+      if (tagBtn) tagBtn.setAttribute("aria-expanded", "false");
+    }
+  });
 
   $("#chip-clear-source").addEventListener("click", () => {
     state.currentSource = "";
@@ -167,5 +277,16 @@ export function initPosts() {
     _clearTagFilter();
     syncChips();
     loadPosts();
+  });
+
+  // Бесконечная прокрутка: догружаем следующую страницу у нижнего края.
+  window.addEventListener("scroll", () => {
+    const tab = document.getElementById("tab-posts");
+    if (!tab || tab.classList.contains("hidden")) return;
+    if (state.postsLoading || !state.postsHasMore) return;
+    const y = window.scrollY || window.pageYOffset || 0;
+    const nearBottom =
+      y + window.innerHeight >= document.documentElement.scrollHeight - 400;
+    if (nearBottom) loadMorePosts();
   });
 }
