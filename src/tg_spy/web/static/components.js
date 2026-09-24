@@ -14,10 +14,18 @@ export function buildPostEl(p, topicsForPost = []) {
   const kindTag = p.kind
     ? `<span class="badge ${escapeHtml(p.kind)}">${escapeHtml(p.kind)}</span> `
     : "";
-  // Теги пользователя (темы), к которым отнесён пост.
-  const tagsHtml = topicsForPost.length
+  // Теги пользователя (темы). Берём из кэша postTags (его наполняет
+  // decoratePostTags), иначе из topicsForPost — чтобы чипы отрисовывались
+  // сразу при любом фильтре, без ожидания второго запроса к API.
+  const _pid = String(p.id);
+  const _tags = topicsForPost.length
+    ? topicsForPost
+    : state.postTags[_pid] && state.postTags[_pid].length
+    ? state.postTags[_pid]
+    : [];
+  const tagsHtml = _tags.length
     ? `<div class="post-tags">` +
-      topicsForPost
+      _tags
         .map(
           (t) =>
             `<span class="usertag" title="тема: ${escapeHtml(t.name)}">${escapeHtml(t.tag)}</span>`

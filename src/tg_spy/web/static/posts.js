@@ -101,6 +101,7 @@ async function decoratePostTags(box, posts) {
     const tagsMap = await api("/api/posts/tags?ids=" + ids.join(","));
     for (const p of posts) {
       const tags = tagsMap[String(p.id)];
+      state.postTags[String(p.id)] = tags && tags.length ? tags : [];
       if (!tags || !tags.length) continue;
       const el = box.querySelector(`.post[data-id="${p.id}"]`);
       if (!el) continue;

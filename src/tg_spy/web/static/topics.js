@@ -255,7 +255,8 @@ async function testConfig() {
 
 // Обновить ТОЛЬКО счётчик найденных постов в каждой теме — без перерисовки
 // списка и без запуска агента (и без затрагивания фильтра тегов ленты).
-export async function refreshTopicCounts() {
+// Тихое обновление счётчика (silent=true — без кнопки и тоста, для поллинга).
+export async function refreshTopicCounts(silent = false) {
   const btn = document.getElementById("refresh-topics");
   const label = btn ? btn.textContent : "";
   if (btn) {
@@ -272,9 +273,9 @@ export async function refreshTopicCounts() {
       const c = card.querySelector(".t-count");
       if (c) c.textContent = `постов: ${t.posts_count || 0}`;
     });
-    toast("Счётчики найденных постов обновлены");
+    if (!silent) toast("Счётчики найденных постов обновлены");
   } catch (e) {
-    toast(e.message, true);
+    if (!silent) toast(e.message, true);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -283,8 +284,22 @@ export async function refreshTopicCounts() {
   }
 }
 
+// Динамический счётчик: опрашиваем /api/topics раз в 5с, пока открыта
+// вкладка «Мои темы» (кнопка «Обновить» убрана — обновление автоматическое).
+let _topicsPollTimer = null;
+export function startTopicsPolling() {
+  stopTopicsPolling();
+  _topicsPollTimer = setInterval(() => refreshTopicCounts(true), 5000);
+}
+export function stopTopicsPolling() {
+  if (_topicsPollTimer) {
+    clearInterval(_topicsPollTimer);
+    _topicsPollTimer = null;
+  }
+}
+
 export function initTopics() {
-  $("#refresh-topics").addEventListener("click", () => refreshTopicCounts());
+  // Кнопка «Обновить» убрана: счётчик обновляется автоматически (поллинг 5с).
 
   $("#form-topic").addEventListener("submit", async (e) => {
     e.preventDefault();
