@@ -157,9 +157,9 @@ export function populateTagFilter() {
   list.innerHTML = state.allTopics
     .map(
       (t) =>
-        `<label class="tf-row" title="${escapeHtml(t.name)}"><input type="checkbox" value="${escapeHtml(t.tag)}" ${
+        `<label class="tf-row" title="${escapeHtml(t.tag)}"><input type="checkbox" value="${escapeHtml(t.tag)}" ${
           state.currentTags.includes(t.tag) ? "checked" : ""
-        }/> ${escapeHtml(t.tag)}</label>`
+        }/> ${escapeHtml(t.name)}</label>`
     )
     .join("");
   const all = document.getElementById("tag-filter-all");

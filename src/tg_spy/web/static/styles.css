@@ -240,15 +240,15 @@
       border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
       max-width: 280px; box-shadow: none; }
     .tag-filter-pop { position: absolute; z-index: 200; top: calc(100% + 6px); left: 0;
-      display: flex; flex-direction: column; gap: 2px; padding: 8px;
+      display: flex; flex-direction: column; gap: 0; padding: 0;
       border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface);
-      box-shadow: var(--shadow); min-width: 220px; max-height: 340px; overflow-y: auto; }
+      box-shadow: var(--shadow); min-width: 240px; max-height: 340px; overflow-y: auto; }
     .tf-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text);
-      cursor: pointer; margin: 0 -8px; padding: 6px 8px; border-radius: 8px; }
+      cursor: pointer; width: 100%; box-sizing: border-box; padding: 8px 12px; }
     .tf-row:hover { background: var(--surface-2); }
     .tf-row input { width: auto; }
-    .tf-all { font-weight: 600; border-bottom: 1px solid var(--border); border-radius: 0;
-      margin: 0 -8px 4px; padding: 6px 8px; }
+    .tf-all { font-weight: 600; border-bottom: 1px solid var(--border);
+      padding: 8px 12px; margin: 0; }
 
     /* Настройки провайдера ИИ — аккуратный столбик */
     .provider-form { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
