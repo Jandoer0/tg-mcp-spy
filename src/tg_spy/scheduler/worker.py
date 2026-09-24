@@ -31,6 +31,7 @@ _agent_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="topic-agent"
 
 
 def _tick() -> None:
+    global _last_feed
     try:
         cfg = load_config()
         sched = cfg.schedule

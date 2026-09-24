@@ -31,6 +31,7 @@ get_posts = posts.get_posts
 get_posts_after = posts.get_posts_after
 get_oldest_post_date = posts.get_oldest_post_date
 get_posts_by_tag = posts.get_posts_by_tag
+get_posts_by_tags = posts.get_posts_by_tags
 
 add_topic = topics.add_topic
 get_topic = topics.get_topic
@@ -55,7 +56,7 @@ __all__ = [
     "get_source", "get_all_sources", "add_channel", "remove_channel",
     "list_channels", "get_channel",
     "save_posts", "get_posts", "get_posts_after", "get_oldest_post_date",
-    "get_posts_by_tag",
+    "get_posts_by_tag", "get_posts_by_tags",
     "add_topic", "get_topic", "get_topic_by_id", "list_topics", "remove_topic",
     "set_topic_active", "update_topic_run", "tag_post", "untag_post",
     "exclude_post", "get_excluded_ids", "reset_exclusions", "get_tagged_posts",
