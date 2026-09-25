@@ -119,29 +119,38 @@ export async function loadConfig() {
   if (!card) return;
   try {
     const cfg = await api("/api/config");
+    
+    // Настройки классификатора
     const classifierProv = (cfg.classifier && cfg.classifier.provider) || {};
     card.querySelector("[name=baseUrl]").value = classifierProv.baseUrl || "";
     card.querySelector("[name=apiKey]").value = classifierProv.apiKey || "";
-    card.querySelector("[name=model]").value = cfg.classifier && cfg.classifier.model ? cfg.classifier.model : "";
+    card.querySelector("[name=model]").value = (cfg.classifier && cfg.classifier.model) || "";
     
-    // Часовой пояс для отображения времени (пусто = локальное время браузера).
+    // Часовой пояс
     state.timezone = (cfg && cfg.timezone) || "";
     populateTimezones();
     const tzSel = document.getElementById("cfg-timezone");
     if (tzSel) tzSel.value = state.timezone || "";
     
-    // Подгрузить список моделей по сохранённому адресу
+    // Подгрузить список моделей классификатора (по его baseUrl)
     await fetchModels(false);
     
-    // Заполнить выбор модели ИИ-редактора
-    await populateEditorModels(false);
+    // Настройки редактора
     const editorProv = (cfg.editor && cfg.editor.provider) || {};
+    const editorBaseUrlInput = document.getElementById("editor-baseUrl");
+    const editorApiKeyInput = document.getElementById("editor-apiKey");
     const editorModelSel = document.getElementById("editor-model");
+    
+    if (editorBaseUrlInput) editorBaseUrlInput.value = editorProv.baseUrl || "";
+    if (editorApiKeyInput) editorApiKeyInput.value = editorProv.apiKey || "";
     if (editorModelSel) {
-        editorModelSel.value = cfg.editor && cfg.editor.model ? cfg.editor.model : "";
+        editorModelSel.value = (cfg.editor && cfg.editor.model) || "";
     }
+    
+    // Подгрузить список моделей редактора (по его baseUrl)
+    await populateEditorModels(false);
   } catch (_e) {
-    /* конфиг недоступен — поля останутся пустыми */
+    console.warn("Ошибка при загрузке конфига:", _e);
   }
 }
 
@@ -213,17 +222,23 @@ async function fetchModels(notify = true) {
 // Опросить провайдера и заполнить <select> моделей для ИИ-редактора.
 // notify=true — показать статус, иначе тихо (при открытии вкладки).
 async function populateEditorModels(notify = true) {
-  const card = document.getElementById("provider-card");
+  const editorBaseUrlInput = document.getElementById("editor-baseUrl");
+  const editorApiKeyInput = document.getElementById("editor-apiKey");
   const sel = document.getElementById("editor-model");
-  if (!card || !sel) return;
-  const baseUrl = card.querySelector("[name=baseUrl]").value.trim();
-  const apiKey = card.querySelector("[name=apiKey]").value.trim();
   const status = document.getElementById("editor-status");
+  
+  if (!editorBaseUrlInput || !sel) return;
+  
+  const baseUrl = editorBaseUrlInput.value.trim();
+  const apiKey = editorApiKeyInput ? editorApiKeyInput.value.trim() : "ollama";
+
   if (!baseUrl) {
-    if (notify && status) status.textContent = "Сначала укажите адрес провайдера (в карточке выше).";
+    if (notify && status) status.textContent = "Укажите адрес провайдера.";
     return;
   }
+  
   if (notify && status) status.textContent = "Получаем список моделей…";
+  
   try {
     const r = await api("/api/config/models", {
       method: "POST",
@@ -238,7 +253,7 @@ async function populateEditorModels(notify = true) {
       if (cur && r.models.includes(cur)) sel.value = cur;
       if (notify && status) {
         status.className = "config-status ok";
-        status.textContent = `Моделей: ${r.models.length}. Выберите модель для ИИ-редактора.`;
+        status.textContent = `Моделей: ${r.models.length}.`;
       }
     } else {
       sel.innerHTML = '<option value="">модели не найдены</option>';
@@ -251,7 +266,7 @@ async function populateEditorModels(notify = true) {
     if (notify && status) {
       status.className = "config-status err";
       status.textContent = "Ошибка: " + e.message;
-    } else console.warn("Автоподгрузка моделей редактора не удалась:", e);
+    }
   }
 }
 
