@@ -274,15 +274,34 @@ async function saveConfig(e) {
   if (e) e.preventDefault();
   const card = document.getElementById("provider-card");
   const st = document.getElementById("config-status");
-  const payload = {
-    classifier: {
-      provider: {
-        baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
-        apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
-      },
-      model: card.querySelector("[name=model]").value.trim(),
+  
+  // Данные классификатора
+  const classifierPayload = {
+    provider: {
+      baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
+      apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
     },
+    model: card.querySelector("[name=model]").value.trim(),
   };
+
+  // Данные редактора
+  const editorBaseUrlInput = document.getElementById("editor-baseUrl");
+  const editorApiKeyInput = document.getElementById("editor-apiKey");
+  const editorModelSel = document.getElementById("editor-model");
+  
+  const editorPayload = {
+    provider: {
+      baseUrl: editorBaseUrlInput ? editorBaseUrlInput.value.trim() : "",
+      apiKey: editorApiKeyInput ? editorApiKeyInput.value.trim() || "ollama" : "ollama",
+    },
+    model: editorModelSel ? editorModelSel.value.trim() : "",
+  };
+
+  const payload = {
+    classifier: classifierPayload,
+    editor: editorPayload,
+  };
+
   try {
     await api("/api/config", {
       method: "POST",
@@ -290,8 +309,8 @@ async function saveConfig(e) {
       body: JSON.stringify(payload),
     });
     st.className = "config-status ok";
-    st.textContent = "Сохранено. Применяется сразу (перезапуск не нужен).";
-    toast("Настройки провайдера сохранены");
+    st.textContent = "Сохранено. Применяется сразу.";
+    toast("Настройки ИИ сохранены");
   } catch (e) {
     st.className = "config-status err";
     st.textContent = "Ошибка: " + e.message;
