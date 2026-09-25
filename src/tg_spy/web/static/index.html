@@ -140,12 +140,12 @@
             <input name="baseUrl" placeholder="например http://host.containers.internal:11434/v1" />
           </label>
           <label class="field">
-            <span class="field-label">Модель</span>
-            <select name="model" id="cfg-model"><option value="">— выберите модель —</option></select>
-          </label>
-          <label class="field">
             <span class="field-label">API-ключ (оставьте «ollama» для локальной модели)</span>
             <input name="apiKey" placeholder="ollama" />
+          </label>
+          <label class="field">
+            <span class="field-label">Модель</span>
+            <select name="model" id="cfg-model"><option value="">— выберите модель —</option></select>
           </label>
           <div class="provider-actions">
             <button type="submit" id="config-save">Сохранить</button>
@@ -183,11 +183,11 @@
             <input name="editorBaseUrl" id="editor-baseUrl" placeholder="например http://host.containers.internal:11434/v1" />
           </label>
           <label class="field">
-            <span class="field-label">API-ключ</span>
+            <span class="field-label">API-ключ (оставьте «ollama» для локальной модели)</span>
             <input name="editorApiKey" id="editor-apiKey" placeholder="ollama" />
           </label>
           <label class="field">
-            <span class="field-label">Модель ИИ-редактора</span>
+            <span class="field-label">Модель</span>
             <select name="editorModel" id="editor-model"><option value="">— как у провайдера (общая модель) —</option></select>
           </label>
           <label class="field">
@@ -201,9 +201,9 @@
             </select>
           </label>
           <div class="provider-actions">
-            <button type="button" id="editor-fetch-models" class="ghost">Обновить список моделей</button>
-            <button type="button" id="editor-save" class="ghost">Сохранить настройки</button>
+            <button type="button" id="editor-save">Сохранить</button>
             <button type="button" id="editor-test" class="ghost">Проверить соединение</button>
+            <button type="button" id="editor-fetch-models" class="ghost">Обновить список моделей</button>
             <button type="button" id="editor-run" class="ghost">Запустить редактора</button>
           </div>
         </form>

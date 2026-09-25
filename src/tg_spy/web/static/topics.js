@@ -119,23 +119,27 @@ export async function loadConfig() {
   if (!card) return;
   try {
     const cfg = await api("/api/config");
-    const prov = (cfg.providers && cfg.providers[cfg.provider || "ollama"]) || {};
-    card.querySelector("[name=baseUrl]").value = prov.baseUrl || "";
-    card.querySelector("[name=model]").value = cfg.model || "";
-    card.querySelector("[name=apiKey]").value = prov.apiKey || "";
+    const classifierProv = (cfg.classifier && cfg.classifier.provider) || {};
+    card.querySelector("[name=baseUrl]").value = classifierProv.baseUrl || "";
+    card.querySelector("[name=apiKey]").value = classifierProv.apiKey || "";
+    card.querySelector("[name=model]").value = cfg.classifier && cfg.classifier.model ? cfg.classifier.model : "";
+    
     // Часовой пояс для отображения времени (пусто = локальное время браузера).
     state.timezone = (cfg && cfg.timezone) || "";
     populateTimezones();
     const tzSel = document.getElementById("cfg-timezone");
     if (tzSel) tzSel.value = state.timezone || "";
-    // Подгрузить список моделей по сохранённому адресу (если он задан).
+    
+    // Подгрузить список моделей по сохранённому адресу
     await fetchModels(false);
-    const modelSel = document.getElementById("cfg-model");
-    if (modelSel && cfg.model) modelSel.value = cfg.model;
-    // Заполнить выбор модели ИИ-редактора (отдельно от общей модели).
+    
+    // Заполнить выбор модели ИИ-редактора
     await populateEditorModels(false);
+    const editorProv = (cfg.editor && cfg.editor.provider) || {};
     const editorModelSel = document.getElementById("editor-model");
-    if (editorModelSel && cfg.editorModel) editorModelSel.value = cfg.editorModel;
+    if (editorModelSel) {
+        editorModelSel.value = cfg.editor && cfg.editor.model ? cfg.editor.model : "";
+    }
   } catch (_e) {
     /* конфиг недоступен — поля останутся пустыми */
   }
@@ -257,18 +261,11 @@ async function saveConfig(e) {
   const st = document.getElementById("config-status");
   const payload = {
     classifier: {
-      provider: card.querySelector("[name=baseUrl]").value.trim() || "ollama",
-      model: card.querySelector("[name=model]").value.trim(),
-    },
-    editor: {
-      provider: document.getElementById("editor-baseUrl")?.value.trim() || "ollama",
-      model: document.getElementById("editor-model")?.value.trim() || "",
-    },
-    providers: {
-      ollama: {
+      provider: {
         baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
         apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
       },
+      model: card.querySelector("[name=model]").value.trim(),
     },
   };
   try {
