@@ -50,7 +50,8 @@ def edit_one_post(post_id: int) -> dict:
         return {"post_id": post_id, "ok": False, "error": "пустой текст", "skipped": True}
     # Уже отредактирован и не требует повтора — пропускаем при пакетном прогоне,
     # но для явного персонального запуска обрабатываем заново.
-    edited = agent.edit_text(original, model=_editor_model())
+    cfg = load_config()
+    edited = agent.edit_text(original, model=cfg.editor_model)
     if edited is None:
         set_post_editor_status(post_id, "none")
         return {
@@ -67,20 +68,13 @@ def edit_one_post(post_id: int) -> dict:
     }
 
 
-def _editor_provider() -> ProviderConfig:
-    """Провайдер для ИИ-редактора."""
-    from ..config import load_config, DEFAULT_PROVIDERS
-    cfg = load_config()
-    prov_name = cfg.editor_provider or "ollama"
-    return cfg.providers.get(prov_name, DEFAULT_PROVIDERS["ollama"])
+def _get_editor_provider(cfg):
+    """Получить провайдер для ИИ-редактора из конфига."""
+    from ..config import get_provider
+    return get_provider(cfg, provider_name=cfg.editor_provider)
 
 
-def _editor_model() -> Optional[str]:
-    """Модель для ИИ-редактора."""
-    from ..config import load_config
-    cfg = load_config()
-    m = (cfg.editor_model or "").strip()
-    return m or None
+
 
 
 def edit_post_async(post_id: int) -> None:

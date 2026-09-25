@@ -47,13 +47,16 @@ AGENT_RETRY_BACKOFF = float(os.environ.get("AGENT_RETRY_BACKOFF", "1.5"))
 AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 
 
-def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] = None) -> Optional[str]:
+def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] = None, provider_name: str = "classifier") -> Optional[str]:
     """Один вызов OpenAI-совместимого chat/completions. Возвращает текст."""
     cfg = load_config()
-    prov = get_provider(cfg)
+    prov = get_provider(cfg, provider_name=provider_name)
     base = (prov.base_url or "http://127.0.0.1:11434/v1").rstrip("/")
     url = f"{base}/chat/completions"
-    model = model or cfg.model or "llama3.2"
+    if provider_name == "classifier":
+        model = model or cfg.classifier_model or "llama3.2"
+    else:
+        model = model or cfg.editor_model or "llama3.2"
     api_key = prov.api_key or "ollama"
     compat = prov.compat
 
@@ -318,6 +321,7 @@ def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> 
         ],
         temperature=0.0,
         model=model,
+        provider_name="editor",
     )
     if content is None:
         return None
@@ -373,10 +377,13 @@ def list_models(base_url: str, api_key: str) -> dict:
     return {"ok": False, "error": f"Не удалось получить список моделей: {last_err or 'пусто'}"}
 
 
-def test_connection() -> dict:
+def test_connection(provider_name: str = "classifier") -> dict:
     """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»)."""
     cfg = load_config()
-    model = cfg.model or "llama3.2"
+    if provider_name == "classifier":
+        model = cfg.classifier_model or "llama3.2"
+    else:
+        model = cfg.editor_model or "llama3.2"
     try:
         content = _chat(
             [
@@ -387,6 +394,7 @@ def test_connection() -> dict:
                 },
             ],
             temperature=0.0,
+            provider_name=provider_name,
         )
         if content is None:
             return {

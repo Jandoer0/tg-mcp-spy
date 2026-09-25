@@ -1,6 +1,12 @@
 {
-  "provider": "ollama",
-  "model": "qwen3:4b",
+  "classifier": {
+    "provider": "ollama",
+    "model": "qwen3:4b"
+  },
+  "editor": {
+    "provider": "ollama",
+    "model": "qwen3:4b"
+  },
   "systemPrompt": "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли каждый пост из списка к заданной теме. Отвечай только JSON, без пояснений и аналитики.",
   "schedule": {
     "enabled": true,

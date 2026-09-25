@@ -184,10 +184,14 @@ def load_config() -> AppConfig:
         logger.warning("Не удалось прочитать config.json: %s", e)
 
     # Переопределения через переменные окружения.
-    if os.environ.get("AGENT_PROVIDER"):
-        cfg.provider = os.environ["AGENT_PROVIDER"]
-    if os.environ.get("AGENT_MODEL"):
-        cfg.model = os.environ["AGENT_MODEL"]
+    if os.environ.get("AGENT_CLASSIFIER_PROVIDER"):
+        cfg.classifier_provider = os.environ["AGENT_CLASSIFIER_PROVIDER"]
+    if os.environ.get("AGENT_CLASSIFIER_MODEL"):
+        cfg.classifier_model = os.environ["AGENT_CLASSIFIER_MODEL"]
+    if os.environ.get("AGENT_EDITOR_PROVIDER"):
+        cfg.editor_provider = os.environ["AGENT_EDITOR_PROVIDER"]
+    if os.environ.get("AGENT_EDITOR_MODEL"):
+        cfg.editor_model = os.environ["AGENT_EDITOR_MODEL"]
     if os.environ.get("AGENT_SYSTEM_PROMPT"):
         cfg.system_prompt = os.environ["AGENT_SYSTEM_PROMPT"]
 
@@ -206,22 +210,15 @@ def load_config() -> AppConfig:
         except ValueError:
             pass
 
-    # Провайдер выбранный — подставим дефолтный ollama, если не описан.
-    prov = cfg.providers.get(cfg.provider)
-    if prov is None:
-        cfg.provider = "ollama"
-        prov = cfg.providers.get("ollama", DEFAULT_PROVIDERS["ollama"])
-
-    if os.environ.get("AGENT_BASE_URL"):
-        prov.base_url = os.environ["AGENT_BASE_URL"]
-    if os.environ.get("AGENT_API_KEY"):
-        prov.api_key = os.environ["AGENT_API_KEY"]
     return cfg
 
 
-def get_provider(cfg: AppConfig | None = None) -> ProviderConfig:
+def get_provider(cfg: AppConfig | None = None, provider_name: str | None = None) -> ProviderConfig:
+    """Получить конфигурацию провайдера по имени.
+    Если имя не указано, используется провайдер классификатора по умолчанию."""
     cfg = cfg or load_config()
-    return cfg.providers.get(cfg.provider, DEFAULT_PROVIDERS["ollama"])
+    name = provider_name or cfg.classifier_provider
+    return cfg.providers.get(name, DEFAULT_PROVIDERS["ollama"])
 
 
 def get_config_path() -> str:
