@@ -441,8 +441,9 @@ async def api_config(request: Request) -> JSONResponse:
 
 
 async def api_config_test(request: Request) -> JSONResponse:
+    provider_type = request.query_params.get("type", "classifier")
     try:
-        return JSONResponse(agent.test_connection())
+        return JSONResponse(agent.test_connection(provider_name=provider_type))
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(e)})
 
@@ -459,7 +460,8 @@ async def api_config_models(request: Request) -> JSONResponse:
     api_key = (body.get("apiKey") or "").strip()
     if not base_url:
         cfg = load_config()
-        prov = get_provider(cfg)
+        # По умолчанию берем провайдера классификатора
+        prov = get_provider(cfg, provider_name=cfg.classifier_provider)
         base_url = prov.base_url or ""
         api_key = api_key or (prov.api_key or "")
     try:
