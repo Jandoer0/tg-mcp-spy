@@ -4,7 +4,7 @@ import { initTheme } from "./theme.js";
 import { initNav } from "./nav.js";
 import { initPosts, loadPosts } from "./posts.js";
 import { initSubs, loadSources } from "./subs.js";
-import { initTopics, loadAllTopics } from "./topics.js";
+import { initTopics, loadAllTopics, loadConfig } from "./topics.js";
 
 function boot() {
   initTheme();
@@ -17,6 +17,10 @@ function boot() {
   loadSources();
   loadPosts();
   loadAllTopics();
+
+  // Подтянуть настройки ИИ/часового пояса из конфига сразу, независимо от
+  // того, когда пользователь откроет вкладку «Настройки»/«Мои темы».
+  loadConfig();
 }
 
 if (document.readyState === "loading") {

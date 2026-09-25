@@ -152,9 +152,13 @@ export async function loadConfig() {
         editorModelSel.value = (cfg.editor && cfg.editor.model) || "";
     }
     
-    // Теперь, когда все поля заполнены, загружаем списки моделей
-    await fetchModels(false);
-    await populateEditorModels(false);
+    // Теперь, когда все поля заполнены, загружаем списки моделей и
+    // подставляем в выпадающие списки модели, сохранённые в конфиге.
+    // Значения моделей передаём явно: сам <select> в этот момент ещё не
+    // содержит нужных <option>, поэтому значение «не прилипает» и его
+    // нужно повторно выставить после перестройки списка из ответа API.
+    await fetchModels(false, (cfg.classifier && cfg.classifier.model) || "");
+    await populateEditorModels(false, (cfg.editor && cfg.editor.model) || "");
   } catch (e) {
     console.error("Ошибка при загрузке конфига:", e);
   }
@@ -188,9 +192,11 @@ function populateTimezones() {
     .join("");
 }
 
-// Опросить провайдера и заполнить <datalist> моделями.
+// Опросить провайдера и заполнить <select> моделями.
 // notify=true — показать статус (при нажатии кнопки), иначе тихо.
-async function fetchModels(notify = true) {
+// desiredModel — модель из конфига, которую нужно выбрать после обновления
+// списка (при начальной загрузке). Если не задана — сохраняем текущий выбор.
+async function fetchModels(notify = true, desiredModel = null) {
   const card = document.getElementById("classifier-card");
   const st = document.getElementById("config-status");
   if (!card) return;
@@ -206,17 +212,22 @@ async function fetchModels(notify = true) {
     return;
   }
   if (notify) st.textContent = "Получаем список моделей…";
+  const sel = document.getElementById("cfg-model");
+  const prev = sel ? sel.value : "";
   try {
     const r = await api("/api/config/models", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ baseUrl, apiKey }),
     });
-    const sel = document.getElementById("cfg-model");
     if (r.ok && Array.isArray(r.models) && r.models.length) {
       sel.innerHTML =
         '<option value="">— выберите модель —</option>' +
         r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+      // Восстанавливаем выбранную модель: приоритет у модели из конфига,
+      // иначе у той, что была выбрана до обновления списка.
+      const target = desiredModel || prev;
+      if (target && r.models.includes(target)) sel.value = target;
       if (notify) {
         st.textContent = `Найдено моделей: ${r.models.length}. Выберите из списка.`;
         toast("Список моделей обновлён");
@@ -233,7 +244,9 @@ async function fetchModels(notify = true) {
 
 // Опросить провайдера и заполнить <select> моделей для ИИ-редактора.
 // notify=true — показать статус, иначе тихо (при открытии вкладки).
-async function populateEditorModels(notify = true) {
+// desiredModel — модель из конфига, которую нужно выбрать после обновления
+// списка (при начальной загрузке). Если не задана — сохраняем текущий выбор.
+async function populateEditorModels(notify = true, desiredModel = null) {
   const editorBaseUrlInput = document.getElementById("editor-baseUrl");
   const editorApiKeyInput = document.getElementById("editor-apiKey");
   const sel = document.getElementById("editor-model");
@@ -262,7 +275,10 @@ async function populateEditorModels(notify = true) {
       sel.innerHTML =
         '<option value="">— как у провайдера (общая модель) —</option>' +
         r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      if (cur && r.models.includes(cur)) sel.value = cur;
+      // Восстанавливаем выбранную модель: приоритет у модели из конфига,
+      // иначе у той, что была выбрана до обновления списка.
+      const target = desiredModel || cur;
+      if (target && r.models.includes(target)) sel.value = target;
       if (notify && status) {
         status.className = "config-status ok";
         status.textContent = `Моделей: ${r.models.length}.`;
@@ -471,9 +487,9 @@ export function initEditorCard() {
   if (!form || form.dataset.wired) return;
   form.dataset.wired = "1";
 
-  // Загрузка настроек редактора при инициализации
-  loadEditorConfig();
-
+  // Настройки редактора (адрес, ключ, модель) и список моделей уже
+  // подгружаются из серверного конфига функцией loadConfig() — дублирующая
+  // загрузка из localStorage здесь не нужна и только мешает (гонка записей).
   // Кнопка обновления списка моделей
   const fetchBtn = document.getElementById("editor-fetch-models");
   if (fetchBtn) {
@@ -573,34 +589,6 @@ export function initEditorCard() {
         }
       }
     });
-  }
-}
-
-// Загрузка конфигурации ИИ-редактора из localStorage
-async function loadEditorConfig() {
-  const baseUrlInput = document.getElementById("editor-baseUrl");
-  const apiKeyInput = document.getElementById("editor-apiKey");
-  const modelSel = document.getElementById("editor-model");
-  
-  if (!baseUrlInput || !apiKeyInput || !modelSel) return;
-
-  // Теперь приоритет у серверного конфига (из loadConfig), 
-  // поэтому localStorage используем только как фолбэк, если поля пусты.
-  if (baseUrlInput.value) return; 
-
-  const saved = localStorage.getItem("editorConfig");
-  if (saved) {
-    try {
-      const cfg = JSON.parse(saved);
-      baseUrlInput.value = cfg.baseUrl || "";
-      apiKeyInput.value = cfg.apiKey || "ollama";
-      modelSel.value = cfg.model || "";
-      if (cfg.baseUrl) {
-        await fetchEditorModels(false);
-      }
-    } catch (e) {
-      console.warn("Failed to load editor config", e);
-    }
   }
 }
 
