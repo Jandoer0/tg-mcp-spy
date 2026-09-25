@@ -199,7 +199,7 @@ function _outsideEditor(e) {
 }
 
 async function refreshPostEditor(el, postId) {
-  """Перечитать состояние редактора поста и обновить индикатор в DOM."""
+  // Перечитать состояние редактора поста и обновить индикатор в DOM.
   try {
     const data = await api(`/api/posts/editor?ids=${encodeURIComponent(postId)}`);
     const st = data[String(postId)] || { status: "none", active: 0, has_edited: false };
