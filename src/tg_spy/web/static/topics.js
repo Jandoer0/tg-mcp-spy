@@ -571,6 +571,10 @@ async function loadEditorConfig() {
   
   if (!baseUrlInput || !apiKeyInput || !modelSel) return;
 
+  // Теперь приоритет у серверного конфига (из loadConfig), 
+  // поэтому localStorage используем только как фолбэк, если поля пусты.
+  if (baseUrlInput.value) return; 
+
   const saved = localStorage.getItem("editorConfig");
   if (saved) {
     try {
@@ -578,7 +582,6 @@ async function loadEditorConfig() {
       baseUrlInput.value = cfg.baseUrl || "";
       apiKeyInput.value = cfg.apiKey || "ollama";
       modelSel.value = cfg.model || "";
-      // Если есть сохраненные настройки, сразу пробуем подгрузить модели
       if (cfg.baseUrl) {
         await fetchEditorModels(false);
       }
