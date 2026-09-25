@@ -398,7 +398,7 @@ async def api_config(request: Request) -> JSONResponse:
     data = await _json(request, default={})
     cfg = load_config()
     cur = cfg.to_legacy_dict()
-    for k in ("provider", "model", "systemPrompt"):
+    for k in ("provider", "model", "systemPrompt", "editorModel"):
         if data.get(k) not in (None, ""):
             cur[k] = data[k]
     # Часовой пояс: пустая строка = «авто (время браузера)», допустимо сохранять.

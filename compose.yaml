@@ -6,7 +6,7 @@ services:
     image: ghcr.io/jandoer0/tg-mcp-spy:latest
     container_name: tg-mcp-spy
     ports:
-      - "8090:8000"
+      - "8095:8000"
     environment:
       HOST: 0.0.0.0
       PORT: 8000
