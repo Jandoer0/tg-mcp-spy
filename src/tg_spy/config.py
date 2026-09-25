@@ -58,12 +58,20 @@ class ScheduleConfig(BaseModel):
 class AppConfig(BaseModel):
     """Итоговый конфиг приложения."""
 
-    # Настройки классификатора (по умолчанию)
-    classifier_provider: str = "ollama"
+    # Полные настройки классификатора
+    classifier: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
+        base_url="http://host.containers.internal:11434/v1",
+        api_key="ollama",
+        compat=ProviderCompat(disable_thinking=True)
+    ))
     classifier_model: str = "qwen3:4b"
     
-    # Настройки редактора (по умолчанию)
-    editor_provider: str = "ollama"
+    # Полные настройки редактора
+    editor: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
+        base_url="http://host.containers.internal:11434/v1",
+        api_key="ollama",
+        compat=ProviderCompat(disable_thinking=True)
+    ))
     editor_model: str = "qwen3:4b"
 
     timezone: str = ""  # IANA-зона для отображения времени; "" = локальное время браузера
@@ -73,16 +81,18 @@ class AppConfig(BaseModel):
         "без пояснений и аналитики."
     )
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
+    # Глобальные провайдеры больше не нужны как единственный источник истины, 
+    # но оставим для совместимости с API списка моделей.
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
 
     # --- Сериализация под формат, ожидаемый фронтендом ---
     def to_legacy_dict(self) -> dict:
         """Словарь в форме, совместимой с веб-интерфейсом."""
         d = self.model_dump()
-        out_providers = {}
-        for name, p in d["providers"].items():
+        
+        def prov_to_dict(p):
             compat = p["compat"]
-            out_providers[name] = {
+            return {
                 "baseUrl": p["base_url"],
                 "api": p["api"],
                 "apiKey": p["api_key"],
@@ -92,13 +102,14 @@ class AppConfig(BaseModel):
                     "disableThinking": compat["disable_thinking"],
                 },
             }
+
         return {
             "classifier": {
-                "provider": d["classifier_provider"],
+                "provider": prov_to_dict(d["classifier"]),
                 "model": d["classifier_model"],
             },
             "editor": {
-                "provider": d["editor_provider"],
+                "provider": prov_to_dict(d["editor"]),
                 "model": d["editor_model"],
             },
             "timezone": d["timezone"],
@@ -108,16 +119,17 @@ class AppConfig(BaseModel):
                 "feedRefreshMinutes": d["schedule"]["feed_refresh_minutes"],
                 "topicMinutes": d["schedule"]["topic_minutes"],
             },
-            "providers": out_providers,
+            "providers": {name: prov_to_dict(p) for name, p in d["providers"].items()},
         }
 
     @classmethod
     def from_legacy_dict(cls, data: dict) -> "AppConfig":
         """Собрать модель из словаря config.json."""
-        providers = {}
-        for name, p in (data.get("providers") or {}).items():
+        
+        def dict_to_prov(p):
+            if not p: return ProviderConfig()
             compat = (p or {}).get("compat") or {}
-            providers[name] = ProviderConfig(
+            return ProviderConfig(
                 base_url=p.get("baseUrl", "http://host.containers.internal:11434/v1"),
                 api=p.get("api", "openai-completions"),
                 api_key=p.get("apiKey", "ollama"),
@@ -127,17 +139,20 @@ class AppConfig(BaseModel):
                     disable_thinking=bool(compat.get("disableThinking")),
                 ),
             )
+
+        providers = {}
+        for name, p in (data.get("providers") or {}).items():
+            providers[name] = dict_to_prov(p)
         
-        # Обработка старого формата для совместимости
-        classifier = data.get("classifier") or {}
-        editor = data.get("editor") or {}
+        classifier_data = data.get("classifier") or {}
+        editor_data = data.get("editor") or {}
         
         sched = data.get("schedule") or {}
         return cls(
-            classifier_provider=classifier.get("provider") or data.get("provider", "ollama"),
-            classifier_model=classifier.get("model") or data.get("model", "qwen3:4b"),
-            editor_provider=editor.get("provider") or data.get("provider", "ollama"),
-            editor_model=editor.get("model") or data.get("editorModel", data.get("model", "qwen3:4b")),
+            classifier=dict_to_prov(classifier_data.get("provider")),
+            classifier_model=classifier_data.get("model", "qwen3:4b"),
+            editor=dict_to_prov(editor_data.get("provider")),
+            editor_model=editor_data.get("model", "qwen3:4b"),
             timezone=data.get("timezone", ""),
             system_prompt=data.get(
                 "systemPrompt",
@@ -167,31 +182,35 @@ DEFAULT_PROVIDERS = {
 
 def load_config() -> AppConfig:
     """Собрать конфиг: дефолт + config.json + переменные окружения."""
-    cfg = AppConfig(providers=copy.deepcopy(DEFAULT_PROVIDERS))
+    cfg = AppConfig()
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             user = json.load(f)
         if isinstance(user, dict):
             user_cfg = AppConfig.from_legacy_dict(user)
-            # Сливаем провайдеров: дефолтные + из файла.
-            merged_providers = copy.deepcopy(DEFAULT_PROVIDERS)
-            merged_providers.update(user_cfg.providers)
             cfg = user_cfg
-            cfg.providers = merged_providers
     except FileNotFoundError:
         logger.info("config.json не найден, используется конфиг по умолчанию")
     except Exception as e:
         logger.warning("Не удалось прочитать config.json: %s", e)
 
     # Переопределения через переменные окружения.
-    if os.environ.get("AGENT_CLASSIFIER_PROVIDER"):
-        cfg.classifier_provider = os.environ["AGENT_CLASSIFIER_PROVIDER"]
+    # Классификатор
+    if os.environ.get("AGENT_CLASSIFIER_PROVIDER_URL"):
+        cfg.classifier.base_url = os.environ["AGENT_CLASSIFIER_PROVIDER_URL"]
+    if os.environ.get("AGENT_CLASSIFIER_API_KEY"):
+        cfg.classifier.api_key = os.environ["AGENT_CLASSIFIER_API_KEY"]
     if os.environ.get("AGENT_CLASSIFIER_MODEL"):
         cfg.classifier_model = os.environ["AGENT_CLASSIFIER_MODEL"]
-    if os.environ.get("AGENT_EDITOR_PROVIDER"):
-        cfg.editor_provider = os.environ["AGENT_EDITOR_PROVIDER"]
+    
+    # Редактор
+    if os.environ.get("AGENT_EDITOR_PROVIDER_URL"):
+        cfg.editor.base_url = os.environ["AGENT_EDITOR_PROVIDER_URL"]
+    if os.environ.get("AGENT_EDITOR_API_KEY"):
+        cfg.editor.api_key = os.environ["AGENT_EDITOR_API_KEY"]
     if os.environ.get("AGENT_EDITOR_MODEL"):
         cfg.editor_model = os.environ["AGENT_EDITOR_MODEL"]
+
     if os.environ.get("AGENT_SYSTEM_PROMPT"):
         cfg.system_prompt = os.environ["AGENT_SYSTEM_PROMPT"]
 
@@ -214,11 +233,15 @@ def load_config() -> AppConfig:
 
 
 def get_provider(cfg: AppConfig | None = None, provider_name: str | None = None) -> ProviderConfig:
-    """Получить конфигурацию провайдера по имени.
-    Если имя не указано, используется провайдер классификатора по умолчанию."""
+    """Получить конфигурацию провайдера.
+    Если provider_name == 'classifier', возвращаем настройки классификатора.
+    Если 'editor' — редактора. 
+    Если None — по умолчанию классификатора.
+    """
     cfg = cfg or load_config()
-    name = provider_name or cfg.classifier_provider
-    return cfg.providers.get(name, DEFAULT_PROVIDERS["ollama"])
+    if provider_name == "editor":
+        return cfg.editor
+    return cfg.classifier
 
 
 def get_config_path() -> str:

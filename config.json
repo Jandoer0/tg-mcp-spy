@@ -1,20 +1,6 @@
 {
   "classifier": {
-    "provider": "ollama",
-    "model": "qwen3:4b"
-  },
-  "editor": {
-    "provider": "ollama",
-    "model": "qwen3:4b"
-  },
-  "systemPrompt": "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли каждый пост из списка к заданной теме. Отвечай только JSON, без пояснений и аналитики.",
-  "schedule": {
-    "enabled": true,
-    "feedRefreshMinutes": 60,
-    "topicMinutes": 1440
-  },
-  "providers": {
-    "ollama": {
+    "provider": {
       "baseUrl": "http://host.containers.internal:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
@@ -23,6 +9,27 @@
         "jsonObjectFormat": true,
         "disableThinking": true
       }
-    }
-  }
+    },
+    "model": "qwen3:4b"
+  },
+  "editor": {
+    "provider": {
+      "baseUrl": "http://host.containers.internal:11434/v1",
+      "api": "openai-completions",
+      "apiKey": "ollama",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "jsonObjectFormat": true,
+        "disableThinking": true
+      }
+    },
+    "model": "qwen3:4b"
+  },
+  "systemPrompt": "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли каждый пост из списка к заданной теме. Отвечай только JSON, без пояснений и аналитики.",
+  "schedule": {
+    "enabled": true,
+    "feedRefreshMinutes": 60,
+    "topicMinutes": 1440
+  },
+  "providers": {}
 }
