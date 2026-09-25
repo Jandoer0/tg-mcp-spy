@@ -67,23 +67,20 @@ def edit_one_post(post_id: int) -> dict:
     }
 
 
-def _editor_model() -> Optional[str]:
-    """Модель для ИИ-редактора.
+def _editor_provider() -> ProviderConfig:
+    """Провайдер для ИИ-редактора."""
+    from ..config import load_config, DEFAULT_PROVIDERS
+    cfg = load_config()
+    prov_name = cfg.editor_provider or "ollama"
+    return cfg.providers.get(prov_name, DEFAULT_PROVIDERS["ollama"])
 
-    Теперь берется из localStorage на фронтенде и передается при запуске,
-    но для обратной совместимости и фонового планировщика оставляем чтение из конфига.
-    Если в конфиге есть editor_model, используем её, иначе общую модель.
-    """
-    try:
-        from ..config import load_config
-        cfg = load_config()
-        # Проверяем наличие editor_model в конфиге (если он там сохранен)
-        m = getattr(cfg, 'editor_model', None)
-        if m and str(m).strip():
-            return str(m).strip()
-        return cfg.model or None
-    except Exception:
-        return None
+
+def _editor_model() -> Optional[str]:
+    """Модель для ИИ-редактора."""
+    from ..config import load_config
+    cfg = load_config()
+    m = (cfg.editor_model or "").strip()
+    return m or None
 
 
 def edit_post_async(post_id: int) -> None:

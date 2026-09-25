@@ -58,8 +58,14 @@ class ScheduleConfig(BaseModel):
 class AppConfig(BaseModel):
     """Итоговый конфиг приложения."""
 
-    provider: str = "ollama"
-    model: str = "qwen3:4b"
+    # Настройки классификатора (по умолчанию)
+    classifier_provider: str = "ollama"
+    classifier_model: str = "qwen3:4b"
+    
+    # Настройки редактора (по умолчанию)
+    editor_provider: str = "ollama"
+    editor_model: str = "qwen3:4b"
+
     timezone: str = ""  # IANA-зона для отображения времени; "" = локальное время браузера
     system_prompt: str = (
         "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли "
@@ -69,11 +75,10 @@ class AppConfig(BaseModel):
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
 
-    # --- Сериализация под формат, ожидаемый фронтендом/старым кодом ---
+    # --- Сериализация под формат, ожидаемый фронтендом ---
     def to_legacy_dict(self) -> dict:
-        """Словарь в форме, совместимой с веб-интерфейсом и старыми вызовами."""
+        """Словарь в форме, совместимой с веб-интерфейсом."""
         d = self.model_dump()
-        # Переводим camelCase-ключи compat в то, что ждёт фронтенд.
         out_providers = {}
         for name, p in d["providers"].items():
             compat = p["compat"]
@@ -88,10 +93,15 @@ class AppConfig(BaseModel):
                 },
             }
         return {
-            "provider": d["provider"],
-            "model": d["model"],
-            "editorModel": d.get("editor_model", ""),
-            "timezone": d.get("timezone", ""),
+            "classifier": {
+                "provider": d["classifier_provider"],
+                "model": d["classifier_model"],
+            },
+            "editor": {
+                "provider": d["editor_provider"],
+                "model": d["editor_model"],
+            },
+            "timezone": d["timezone"],
             "systemPrompt": d["system_prompt"],
             "schedule": {
                 "enabled": d["schedule"]["enabled"],
@@ -103,7 +113,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def from_legacy_dict(cls, data: dict) -> "AppConfig":
-        """Собрать модель из словаря config.json (camelCase-ключи)."""
+        """Собрать модель из словаря config.json."""
         providers = {}
         for name, p in (data.get("providers") or {}).items():
             compat = (p or {}).get("compat") or {}
@@ -117,11 +127,17 @@ class AppConfig(BaseModel):
                     disable_thinking=bool(compat.get("disableThinking")),
                 ),
             )
+        
+        # Обработка старого формата для совместимости
+        classifier = data.get("classifier") or {}
+        editor = data.get("editor") or {}
+        
         sched = data.get("schedule") or {}
         return cls(
-            provider=data.get("provider", "ollama"),
-            model=data.get("model", "qwen3:4b"),
-            editor_model=data.get("editorModel", "") or data.get("editor_model", ""),
+            classifier_provider=classifier.get("provider") or data.get("provider", "ollama"),
+            classifier_model=classifier.get("model") or data.get("model", "qwen3:4b"),
+            editor_provider=editor.get("provider") or data.get("provider", "ollama"),
+            editor_model=editor.get("model") or data.get("editorModel", data.get("model", "qwen3:4b")),
             timezone=data.get("timezone", ""),
             system_prompt=data.get(
                 "systemPrompt",

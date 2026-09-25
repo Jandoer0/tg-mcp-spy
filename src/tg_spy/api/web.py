@@ -398,33 +398,44 @@ async def api_config(request: Request) -> JSONResponse:
     data = await _json(request, default={})
     cfg = load_config()
     cur = cfg.to_legacy_dict()
-    for k in ("provider", "model", "systemPrompt", "editorModel"):
-        if data.get(k) not in (None, ""):
-            cur[k] = data[k]
-    # Часовой пояс: пустая строка = «авто (время браузера)», допустимо сохранять.
+    
+    # Сохранение классификатора
+    if "classifier" in data:
+        c_data = data["classifier"]
+        cur["classifier"]["provider"] = c_data.get("provider", cur["classifier"]["provider"])
+        cur["classifier"]["model"] = c_data.get("model", cur["classifier"]["model"])
+    
+    # Сохранение редактора
+    if "editor" in data:
+        e_data = data["editor"]
+        cur["editor"]["provider"] = e_data.get("provider", cur["editor"]["provider"])
+        cur["editor"]["model"] = e_data.get("model", cur["editor"]["model"])
+
+    # Обновление провайдеров (глобальный список доступных коннектов)
+    if "providers" in data:
+        provs = data["providers"]
+        if isinstance(provs, dict):
+            cur.setdefault("providers", {})
+            for pname, pblock in provs.items():
+                if isinstance(pblock, dict):
+                    cur["providers"].setdefault(pname, {})
+                    cur["providers"][pname].update(pblock)
+
     if "timezone" in data:
         cur["timezone"] = data["timezone"] or ""
+        
     sched = data.get("schedule")
     if isinstance(sched, dict):
         cur.setdefault("schedule", {})
         for sk, sv in sched.items():
-            if sv in (None, ""):
-                continue
-            try:
-                cur["schedule"][sk] = int(sv)
-            except (TypeError, ValueError):
-                cur["schedule"][sk] = sv
-    provs = data.get("providers")
-    if isinstance(provs, dict):
-        cur.setdefault("providers", {})
-        for pname, pblock in provs.items():
-            if isinstance(pblock, dict):
-                cur["providers"].setdefault(pname, {})
-                cur["providers"][pname].update(pblock)
+            if sv in (None, ""): continue
+            try: cur["schedule"][sk] = int(sv)
+            except (TypeError, ValueError): cur["schedule"][sk] = sv
+            
     try:
         new_cfg = AppConfig.from_legacy_dict(cur)
         save_config(new_cfg)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     return JSONResponse({"ok": True})
 

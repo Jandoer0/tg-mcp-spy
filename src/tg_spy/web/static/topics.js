@@ -256,9 +256,14 @@ async function saveConfig(e) {
   const card = document.getElementById("provider-card");
   const st = document.getElementById("config-status");
   const payload = {
-    provider: "ollama",
-    model: card.querySelector("[name=model]").value.trim(),
-    editorModel: document.getElementById("editor-model")?.value.trim() || "",
+    classifier: {
+      provider: card.querySelector("[name=baseUrl]").value.trim() || "ollama",
+      model: card.querySelector("[name=model]").value.trim(),
+    },
+    editor: {
+      provider: document.getElementById("editor-baseUrl")?.value.trim() || "ollama",
+      model: document.getElementById("editor-model")?.value.trim() || "",
+    },
     providers: {
       ollama: {
         baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
