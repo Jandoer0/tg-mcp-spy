@@ -132,6 +132,10 @@ export async function loadConfig() {
     await fetchModels(false);
     const modelSel = document.getElementById("cfg-model");
     if (modelSel && cfg.model) modelSel.value = cfg.model;
+    // Заполнить выбор модели ИИ-редактора (отдельно от общей модели).
+    await populateEditorModels(false);
+    const editorModelSel = document.getElementById("editor-model");
+    if (editorModelSel && cfg.editorModel) editorModelSel.value = cfg.editorModel;
   } catch (_e) {
     /* конфиг недоступен — поля останутся пустыми */
   }
@@ -199,6 +203,51 @@ async function fetchModels(notify = true) {
   } catch (e) {
     if (notify) st.textContent = "Ошибка: " + e.message;
     else console.warn("Автоподгрузка моделей не удалась:", e);
+  }
+}
+
+// Опросить провайдера и заполнить <select> моделей для ИИ-редактора.
+// notify=true — показать статус, иначе тихо (при открытии вкладки).
+async function populateEditorModels(notify = true) {
+  const card = document.getElementById("provider-card");
+  const sel = document.getElementById("editor-model");
+  if (!card || !sel) return;
+  const baseUrl = card.querySelector("[name=baseUrl]").value.trim();
+  const apiKey = card.querySelector("[name=apiKey]").value.trim();
+  const status = document.getElementById("editor-status");
+  if (!baseUrl) {
+    if (notify && status) status.textContent = "Сначала укажите адрес провайдера (в карточке выше).";
+    return;
+  }
+  if (notify && status) status.textContent = "Получаем список моделей…";
+  try {
+    const r = await api("/api/config/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl, apiKey }),
+    });
+    if (r.ok && Array.isArray(r.models) && r.models.length) {
+      const cur = sel.value;
+      sel.innerHTML =
+        '<option value="">— как у провайдера (общая модель) —</option>' +
+        r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+      if (cur && r.models.includes(cur)) sel.value = cur;
+      if (notify && status) {
+        status.className = "config-status ok";
+        status.textContent = `Моделей: ${r.models.length}. Выберите модель для ИИ-редактора.`;
+      }
+    } else {
+      sel.innerHTML = '<option value="">модели не найдены</option>';
+      if (notify && status) {
+        status.className = "config-status err";
+        status.textContent = "Модели не найдены: " + (r.error || "пусто");
+      }
+    }
+  } catch (e) {
+    if (notify && status) {
+      status.className = "config-status err";
+      status.textContent = "Ошибка: " + e.message;
+    } else console.warn("Автоподгрузка моделей редактора не удалась:", e);
   }
 }
 
@@ -397,4 +446,27 @@ export function initEditorCard() {
       }
     }
   });
+  // Сохранение выбранной модели ИИ-редактора (отдельно от общей модели).
+  const editorModelSel = document.getElementById("editor-model");
+  if (editorModelSel && !editorModelSel.dataset.wired) {
+    editorModelSel.dataset.wired = "1";
+    editorModelSel.addEventListener("change", async () => {
+      try {
+        await api("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ editorModel: editorModelSel.value || "" }),
+        });
+        toast("Модель ИИ-редактора сохранена");
+        if (status) {
+          status.className = "config-status ok";
+          status.textContent = editorModelSel.value
+            ? `ИИ-редактор будет использовать модель «${editorModelSel.value}».`
+            : "ИИ-редактор будет использовать общую модель провайдера.";
+        }
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  }
 }

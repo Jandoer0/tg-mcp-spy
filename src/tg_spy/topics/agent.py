@@ -47,13 +47,13 @@ AGENT_RETRY_BACKOFF = float(os.environ.get("AGENT_RETRY_BACKOFF", "1.5"))
 AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 
 
-def _chat(messages: list[dict], temperature: float = 0.0) -> Optional[str]:
+def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] = None) -> Optional[str]:
     """Один вызов OpenAI-совместимого chat/completions. Возвращает текст."""
     cfg = load_config()
     prov = get_provider(cfg)
     base = (prov.base_url or "http://127.0.0.1:11434/v1").rstrip("/")
     url = f"{base}/chat/completions"
-    model = cfg.model or "llama3.2"
+    model = model or cfg.model or "llama3.2"
     api_key = prov.api_key or "ollama"
     compat = prov.compat
 
@@ -283,7 +283,7 @@ def _names_from_openai(data) -> list[str]:
     return out
 
 
-def edit_text(text: str, max_chars: int = 4000) -> Optional[str]:
+def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> Optional[str]:
     """Прогнать текст поста через ИИ-редактор (нормализация форматирования,
     удаление мусора, сохранение фактуры). Возвращает отредактированный текст
     или None при недоступности модели.
@@ -317,6 +317,7 @@ def edit_text(text: str, max_chars: int = 4000) -> Optional[str]:
             {"role": "user", "content": text},
         ],
         temperature=0.0,
+        model=model,
     )
     if content is None:
         return None

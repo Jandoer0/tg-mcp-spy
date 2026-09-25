@@ -50,7 +50,7 @@ def edit_one_post(post_id: int) -> dict:
         return {"post_id": post_id, "ok": False, "error": "пустой текст", "skipped": True}
     # Уже отредактирован и не требует повтора — пропускаем при пакетном прогоне,
     # но для явного персонального запуска обрабатываем заново.
-    edited = agent.edit_text(original)
+    edited = agent.edit_text(original, model=_editor_model())
     if edited is None:
         set_post_editor_status(post_id, "none")
         return {
@@ -65,6 +65,20 @@ def edit_one_post(post_id: int) -> dict:
         "edited_len": len(edited),
         "changed": edited.strip() != original,
     }
+
+
+def _editor_model() -> Optional[str]:
+    """Модель для ИИ-редактора (отдельно от модели тематического агента).
+
+    Берётся из конфига (editor_model); если не задана — используется общая
+    модель приложения (cfg.model).
+    """
+    try:
+        from ..config import load_config
+        m = (load_config().editor_model or "").strip()
+        return m or None
+    except Exception:
+        return None
 
 
 def edit_post_async(post_id: int) -> None:

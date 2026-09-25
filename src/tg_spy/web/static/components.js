@@ -233,6 +233,40 @@ export function toggleEditorMenu(el, p) {
   const hasEdited = !!(p.text_edited && String(p.text_edited).trim());
   const editorActive = Number(p.editor_active || 0) === 1;
 
+  // Опросить статус редактора поста, пока не завершится (done/none).
+  async function pollUntilDone() {
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const data = await api(`/api/posts/editor?ids=${encodeURIComponent(postId)}`);
+        const st = data[String(postId)] || {};
+        if (st.status === "done" || st.status === "none") {
+          p.editor_status = st.status;
+          p.text_edited = st.text_edited || null;
+          p.editor_active = st.active || 0;
+          const tag = el.querySelector(".editortag");
+          const done = !!p.text_edited;
+          const lit = done && Number(p.editor_active || 0) === 1;
+          if (tag) tag.className = `editortag ${done ? "done" : "none"}${lit ? " lit" : ""}`;
+          // Автоматически покажем отредактированный текст, если он появился.
+          if (done) {
+            p.editor_active = 1;
+            const textEl = el.querySelector(".text");
+            if (textEl) textEl.innerHTML = renderBody(p.text_edited);
+            if (tag) tag.className = "editortag done lit";
+            toast("Пост отредактирован ИИ");
+          } else {
+            toast("ИИ-редактор не вернул результат (модель недоступна?)", true);
+          }
+          return;
+        }
+      } catch (_e) {
+        /* тихо повторим */
+      }
+    }
+    toast("Время ожидания редактуры истекло", true);
+  }
+
   const actions = [];
   // 1) Запустить/перезапустить редактуру (если ещё не в процессе).
   actions.push({
@@ -246,6 +280,7 @@ export function toggleEditorMenu(el, p) {
         const tag = el.querySelector(".editortag");
         if (tag) tag.className = "editortag editing";
         toast("ИИ-редактор обрабатывает пост…");
+        pollUntilDone();
       } catch (e) { toast(e.message, true); }
     },
   });

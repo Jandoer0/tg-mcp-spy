@@ -45,7 +45,7 @@ def get_posts(source_ids: list[int], since_date: str, limit: int = 50, offset: i
         FROM posts p JOIN sources s ON s.id = p.source_id
         WHERE s.id IN (%s)
           AND p.date >= ?
-        ORDER BY p.id DESC
+        ORDER BY p.date DESC, p.id DESC
         LIMIT ? OFFSET ?
     """ % placeholders
     rows = conn.execute(sql, (*source_ids, since_date, limit, offset)).fetchall()
@@ -188,9 +188,9 @@ def delete_post_edited(post_id: int) -> bool:
 
 
 def get_posts_editor_status(post_ids: list) -> dict:
-    """Вернуть {str(post_id): {status, active, has_edited}} для списка постов."""
+    """Вернуть {str(post_id): {status, active, has_edited, text_edited}} для списка постов."""
     out: dict[str, dict] = {
-        str(int(pid)): {"status": "none", "active": 0, "has_edited": False}
+        str(int(pid)): {"status": "none", "active": 0, "has_edited": False, "text_edited": None}
         for pid in post_ids
     }
     if not post_ids:
@@ -198,8 +198,7 @@ def get_posts_editor_status(post_ids: list) -> dict:
     placeholders = ",".join("?" * len(post_ids))
     conn = get_conn()
     rows = conn.execute(
-        f"SELECT id, editor_status, editor_active, "
-        f"CASE WHEN text_edited IS NOT NULL THEN 1 ELSE 0 END AS has_edited "
+        f"SELECT id, editor_status, editor_active, text_edited "
         f"FROM posts WHERE id IN ({placeholders})",
         [int(p) for p in post_ids],
     ).fetchall()
@@ -208,6 +207,7 @@ def get_posts_editor_status(post_ids: list) -> dict:
         out[str(int(r["id"]))] = {
             "status": r["editor_status"] or "none",
             "active": int(r["editor_active"] or 0),
-            "has_edited": bool(r["has_edited"]),
+            "has_edited": bool(r["text_edited"]),
+            "text_edited": r["text_edited"],
         }
     return out

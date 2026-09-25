@@ -90,6 +90,7 @@ class AppConfig(BaseModel):
         return {
             "provider": d["provider"],
             "model": d["model"],
+            "editorModel": d.get("editor_model", ""),
             "timezone": d.get("timezone", ""),
             "systemPrompt": d["system_prompt"],
             "schedule": {
@@ -120,6 +121,7 @@ class AppConfig(BaseModel):
         return cls(
             provider=data.get("provider", "ollama"),
             model=data.get("model", "qwen3:4b"),
+            editor_model=data.get("editorModel", "") or data.get("editor_model", ""),
             timezone=data.get("timezone", ""),
             system_prompt=data.get(
                 "systemPrompt",
