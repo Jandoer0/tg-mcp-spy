@@ -47,3 +47,6 @@ data-8090/
 .ruff_cache/
 .mypy_cache/
 *.egg-info/
+
+# Внутренний план корректировок агента (не публиковать в форк)
+CORRECTIONS_PLAN.md
