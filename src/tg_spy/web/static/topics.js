@@ -258,6 +258,7 @@ async function saveConfig(e) {
   const payload = {
     provider: "ollama",
     model: card.querySelector("[name=model]").value.trim(),
+    editorModel: document.getElementById("editor-model")?.value.trim() || "",
     providers: {
       ollama: {
         baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
