@@ -331,16 +331,11 @@ def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> 
 
 
 def list_models(base_url: str, api_key: str) -> dict:
-    """Запросить у провайдера список доступных моделей.
-
-    Сначала пробуем OpenAI-совместимый /models, при неудаче или пустом
-    ответе — нативный Ollama /api/tags (провайдер сам выбирает порт).
-    Используется в настройках провайдера: сайт опрашивает провайдера и
-    подставляет список моделей в поле выбора.
-    """
+    """Запросить у провайдера список доступных моделей."""
     base = (base_url or "").strip().rstrip("/")
     if not base:
         return {"ok": False, "error": "Не указан адрес провайдера (API URL)"}
+    
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -348,33 +343,39 @@ def list_models(base_url: str, api_key: str) -> dict:
     models: list[str] = []
     last_err = None
 
-    # 1) OpenAI-совместимый эндпоинт /models.
+    # Определяем корневой URL для Ollama API
+    ollama_root = base
+    if base.endswith("/v1"):
+        ollama_root = base[:-3]
+
+    # 1) Пробуем нативный Ollama /api/tags (наиболее надежный для Ollama)
     try:
-        resp = httpx.get(f"{base}/models", headers=headers, timeout=15.0)
+        resp = httpx.get(f"{ollama_root}/api/tags", headers=headers, timeout=15.0)
         if resp.status_code == 200:
-            models = _names_from_openai(resp.json())
-    except Exception as e:  # noqa: BLE001
+            data = resp.json()
+            if isinstance(data, dict) and "models" in data:
+                models = [str(m["name"]) for m in data["models"] if isinstance(m, dict) and m.get("name")]
+            elif isinstance(data, list):
+                models = [str(m["name"]) for m in data if isinstance(m, dict) and m.get("name")]
+    except Exception as e:
         last_err = e
 
-    # 2) Фолбэк на нативный Ollama /api/tags (если /models пуст или недоступен).
+    # 2) Если не вышло, пробуем OpenAI-совместимый /models
     if not models:
         try:
-            root = base[:-3] if base.endswith("/v1") else base
-            resp = httpx.get(f"{root}/api/tags", headers=headers, timeout=15.0)
+            resp = httpx.get(f"{base}/models", headers=headers, timeout=15.0)
             if resp.status_code == 200:
-                models = [
-                    str(m["name"])
-                    for m in resp.json().get("models", [])
-                    if isinstance(m, dict) and m.get("name")
-                ]
-        except Exception as e:  # noqa: BLE001
+                models = _names_from_openai(resp.json())
+        except Exception as e:
             if last_err is None:
                 last_err = e
 
     models = sorted(set(filter(None, models)))
     if models:
         return {"ok": True, "models": models}
-    return {"ok": False, "error": f"Не удалось получить список моделей: {last_err or 'пусто'}"}
+    
+    err_msg = str(last_err) if last_err else "пусто"
+    return {"ok": False, "error": f"Не удалось получить список моделей: {err_msg}"}
 
 
 def test_connection(provider_name: str = "classifier") -> dict:
