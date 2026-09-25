@@ -421,53 +421,201 @@ export function initEditorCard() {
   const status = document.getElementById("editor-status");
   if (!form || form.dataset.wired) return;
   form.dataset.wired = "1";
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const scope = parseInt(form.querySelector("[name=scope]").value, 10) || 0;
-    if (status) {
-      status.className = "config-status";
-      status.textContent = "ИИ-редактор запущен, обработка в фоне…";
-    }
-    try {
-      const r = await api("/api/editor/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: scope }),
-      });
-      toast(r.message || "ИИ-редактор запущен");
+
+  // Загрузка настроек редактора при инициализации
+  loadEditorConfig();
+
+  // Кнопка обновления списка моделей
+  const fetchBtn = document.getElementById("editor-fetch-models");
+  if (fetchBtn) {
+    fetchBtn.addEventListener("click", async () => {
+      await fetchEditorModels(true);
+    });
+  }
+
+  // Кнопка сохранения настроек
+  const saveBtn = document.getElementById("editor-save");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      await saveEditorConfig();
+      toast("Настройки ИИ-редактора сохранены");
       if (status) {
         status.className = "config-status ok";
-        status.textContent = "Запущено. Готово — обновите ленту новостей, чтобы увидеть результат.";
+        status.textContent = "Настройки сохранены.";
       }
-    } catch (err) {
-      toast(err.message, true);
-      if (status) {
-        status.className = "config-status err";
-        status.textContent = "Ошибка: " + err.message;
+    });
+  }
+
+  // Кнопка проверки соединения
+  const testBtn = document.getElementById("editor-test");
+  if (testBtn) {
+    testBtn.addEventListener("click", async () => {
+      const baseUrlInput = document.getElementById("editor-baseUrl");
+      const apiKeyInput = document.getElementById("editor-apiKey");
+      if (!baseUrlInput) return;
+      
+      const baseUrl = baseUrlInput.value.trim();
+      const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "ollama";
+      
+      if (!baseUrl) {
+        if (status) status.textContent = "Укажите адрес провайдера.";
+        return;
       }
-    }
-  });
-  // Сохранение выбранной модели ИИ-редактора (отдельно от общей модели).
-  const editorModelSel = document.getElementById("editor-model");
-  if (editorModelSel && !editorModelSel.dataset.wired) {
-    editorModelSel.dataset.wired = "1";
-    editorModelSel.addEventListener("change", async () => {
+      
+      if (status) status.textContent = "Проверка связи…";
       try {
-        await api("/api/config", {
+        const r = await api("/api/config/test", { 
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ editorModel: editorModelSel.value || "" }),
+          body: JSON.stringify({ baseUrl, apiKey })
         });
-        toast("Модель ИИ-редактора сохранена");
+        if (r.ok) {
+          if (status) {
+            status.className = "config-status ok";
+            status.textContent = r.message || "Связь установлена.";
+          }
+          toast("Связь с моделью редактора установлена");
+        } else {
+          if (status) {
+            status.className = "config-status err";
+            status.textContent = "Ошибка: " + (r.error || "нет ответа");
+          }
+          toast("Модель недоступна", true);
+        }
+      } catch (e) {
+        if (status) {
+          status.className = "config-status err";
+          status.textContent = "Ошибка: " + e.message;
+        }
+        toast(e.message, true);
+      }
+    });
+  }
+
+  // Кнопка запуска редактора
+  const runBtn = document.getElementById("editor-run");
+  if (runBtn) {
+    runBtn.addEventListener("click", async () => {
+      const scope = parseInt(form.querySelector("[name=scope]").value, 10) || 0;
+      
+      // Сохраняем конфигурацию перед запуском
+      await saveEditorConfig();
+
+      if (status) {
+        status.className = "config-status";
+        status.textContent = "ИИ-редактор запущен, обработка в фоне…";
+      }
+      try {
+        const r = await api("/api/editor/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days: scope }),
+        });
+        toast(r.message || "ИИ-редактор запущен");
         if (status) {
           status.className = "config-status ok";
-          status.textContent = editorModelSel.value
-            ? `ИИ-редактор будет использовать модель «${editorModelSel.value}».`
-            : "ИИ-редактор будет использовать общую модель провайдера.";
+          status.textContent = "Запущено. Готово — обновите ленту новостей, чтобы увидеть результат.";
         }
       } catch (err) {
         toast(err.message, true);
+        if (status) {
+          status.className = "config-status err";
+          status.textContent = "Ошибка: " + err.message;
+        }
       }
     });
+  }
+}
+
+// Загрузка конфигурации ИИ-редактора из localStorage
+async function loadEditorConfig() {
+  const baseUrlInput = document.getElementById("editor-baseUrl");
+  const apiKeyInput = document.getElementById("editor-apiKey");
+  const modelSel = document.getElementById("editor-model");
+  
+  if (!baseUrlInput || !apiKeyInput || !modelSel) return;
+
+  const saved = localStorage.getItem("editorConfig");
+  if (saved) {
+    try {
+      const cfg = JSON.parse(saved);
+      baseUrlInput.value = cfg.baseUrl || "";
+      apiKeyInput.value = cfg.apiKey || "ollama";
+      modelSel.value = cfg.model || "";
+      // Если есть сохраненные настройки, сразу пробуем подгрузить модели
+      if (cfg.baseUrl) {
+        await fetchEditorModels(false);
+      }
+    } catch (e) {
+      console.warn("Failed to load editor config", e);
+    }
+  }
+}
+
+// Сохранение конфигурации ИИ-редактора в localStorage
+async function saveEditorConfig() {
+  const baseUrlInput = document.getElementById("editor-baseUrl");
+  const apiKeyInput = document.getElementById("editor-apiKey");
+  const modelSel = document.getElementById("editor-model");
+  
+  if (!baseUrlInput || !apiKeyInput || !modelSel) return;
+
+  const cfg = {
+    baseUrl: baseUrlInput.value.trim(),
+    apiKey: apiKeyInput.value.trim(),
+    model: modelSel.value
+  };
+  localStorage.setItem("editorConfig", JSON.stringify(cfg));
+}
+
+// Опросить провайдера и заполнить <select> моделей для ИИ-редактора.
+async function fetchEditorModels(notify = true) {
+  const baseUrlInput = document.getElementById("editor-baseUrl");
+  const apiKeyInput = document.getElementById("editor-apiKey");
+  const sel = document.getElementById("editor-model");
+  const status = document.getElementById("editor-status");
+  
+  if (!baseUrlInput || !sel) return;
+  
+  const baseUrl = baseUrlInput.value.trim();
+  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "ollama";
+
+  if (!baseUrl) {
+    if (notify && status) status.textContent = "Укажите адрес провайдера.";
+    return;
+  }
+  
+  if (notify && status) status.textContent = "Получаем список моделей…";
+  
+  try {
+    const r = await api("/api/config/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl, apiKey }),
+    });
+    if (r.ok && Array.isArray(r.models) && r.models.length) {
+      const cur = sel.value;
+      sel.innerHTML =
+        '<option value="">— как у провайдера (общая модель) —</option>' +
+        r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+      if (cur && r.models.includes(cur)) sel.value = cur;
+      if (notify && status) {
+        status.className = "config-status ok";
+        status.textContent = `Моделей: ${r.models.length}.`;
+      }
+      // Сохраняем успешную конфигурацию
+      await saveEditorConfig();
+    } else {
+      sel.innerHTML = '<option value="">модели не найдены</option>';
+      if (notify && status) {
+        status.className = "config-status err";
+        status.textContent = "Модели не найдены: " + (r.error || "пусто");
+      }
+    }
+  } catch (e) {
+    if (notify && status) {
+      status.className = "config-status err";
+      status.textContent = "Ошибка: " + e.message;
+    }
   }
 }

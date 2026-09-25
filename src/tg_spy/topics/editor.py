@@ -68,15 +68,20 @@ def edit_one_post(post_id: int) -> dict:
 
 
 def _editor_model() -> Optional[str]:
-    """Модель для ИИ-редактора (отдельно от модели тематического агента).
+    """Модель для ИИ-редактора.
 
-    Берётся из конфига (editor_model); если не задана — используется общая
-    модель приложения (cfg.model).
+    Теперь берется из localStorage на фронтенде и передается при запуске,
+    но для обратной совместимости и фонового планировщика оставляем чтение из конфига.
+    Если в конфиге есть editor_model, используем её, иначе общую модель.
     """
     try:
         from ..config import load_config
-        m = (load_config().editor_model or "").strip()
-        return m or None
+        cfg = load_config()
+        # Проверяем наличие editor_model в конфиге (если он там сохранен)
+        m = getattr(cfg, 'editor_model', None)
+        if m and str(m).strip():
+            return str(m).strip()
+        return cfg.model or None
     except Exception:
         return None
 

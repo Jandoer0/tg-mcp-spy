@@ -129,11 +129,11 @@
 
     <!-- Вкладка 4: Настройки -->
     <section id="tab-settings" class="tab-panel hidden">
-      <div class="card" id="provider-card">
-        <h2>Настройки провайдера ИИ</h2>
-        <p class="hint">Локальная модель (например Ollama) обслуживает «Мои темы» и
-          ИИ-редактор. Укажите адрес провайдера — сайт сам опросит его и подгрузит
-          список доступных моделей. Настройки применяются сразу (перезапуск не нужен).</p>
+      <div class="card" id="classifier-card">
+        <h2>ИИ классификатор</h2>
+        <p class="hint">Локальная модель (например Ollama) обслуживает «Мои темы». 
+          Укажите адрес провайдера — сайт сам опросит его и подгрузит список доступных моделей. 
+          Настройки применяются сразу (перезапуск не нужен).</p>
         <form id="form-provider" class="provider-form">
           <label class="field">
             <span class="field-label">Адрес провайдера (API URL)</span>
@@ -172,12 +172,20 @@
       </div>
 
       <div class="card" id="editor-card">
-        <h2>ИИ-редактор</h2>
+        <h2>ИИ редактор</h2>
         <p class="hint">Привести текст карточек постов к единому стилю и вычистить мусор:
           рекламу и призывы подписаться, повторяющиеся «хвосты»-подписи, декоративные
           эмодзи, лишние пробелы и пустые строки. Фактура (имена, числа, цитаты)
           сохраняется. Обработка идёт локальной моделью в фоне.</p>
         <form id="form-editor" class="provider-form">
+          <label class="field">
+            <span class="field-label">Адрес провайдера (API URL)</span>
+            <input name="editorBaseUrl" id="editor-baseUrl" placeholder="например http://host.containers.internal:11434/v1" />
+          </label>
+          <label class="field">
+            <span class="field-label">API-ключ</span>
+            <input name="editorApiKey" id="editor-apiKey" placeholder="ollama" />
+          </label>
           <label class="field">
             <span class="field-label">Модель ИИ-редактора</span>
             <select name="editorModel" id="editor-model"><option value="">— как у провайдера (общая модель) —</option></select>
@@ -193,7 +201,10 @@
             </select>
           </label>
           <div class="provider-actions">
-            <button type="submit" id="editor-run">Запустить редактора</button>
+            <button type="button" id="editor-fetch-models" class="ghost">Обновить список моделей</button>
+            <button type="button" id="editor-save" class="ghost">Сохранить настройки</button>
+            <button type="button" id="editor-test" class="ghost">Проверить соединение</button>
+            <button type="button" id="editor-run" class="ghost">Запустить редактора</button>
           </div>
         </form>
         <p class="config-status" id="editor-status"></p>
