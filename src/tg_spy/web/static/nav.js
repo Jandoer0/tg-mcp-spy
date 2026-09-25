@@ -2,7 +2,7 @@
 
 import { $ } from "./core.js";
 import { loadPosts, populateTagFilter } from "./posts.js";
-import { loadConfig, loadTopics, loadAllTopics, startTopicsPolling, stopTopicsPolling } from "./topics.js";
+import { loadConfig, loadTopics, loadAllTopics, startTopicsPolling, stopTopicsPolling, initEditorCard } from "./topics.js";
 
 export function switchTab(tab) {
   document.querySelectorAll(".tab").forEach((t) =>
@@ -11,6 +11,7 @@ export function switchTab(tab) {
   $("#tab-posts").classList.toggle("hidden", tab !== "posts");
   $("#tab-subs").classList.toggle("hidden", tab !== "subs");
   $("#tab-mytopics").classList.toggle("hidden", tab !== "mytopics");
+  $("#tab-settings").classList.toggle("hidden", tab !== "settings");
   stopTopicsPolling();
   if (tab === "posts") {
     populateTagFilter();
@@ -20,6 +21,10 @@ export function switchTab(tab) {
     loadConfig();
     loadTopics();
     startTopicsPolling();
+  }
+  if (tab === "settings") {
+    loadConfig();
+    initEditorCard();
   }
 }
 

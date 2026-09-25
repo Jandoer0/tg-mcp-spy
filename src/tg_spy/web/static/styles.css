@@ -274,6 +274,30 @@
     .config-status.err { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent);
       border: 1px solid color-mix(in srgb, var(--danger) 34%, transparent); }
 
+    /* Заметка о переносе карточек во вкладку «Настройки» */
+    .moved-note { font-size: 13px; color: var(--text-muted); padding: 10px 12px;
+      border: 1px dashed var(--border-strong); border-radius: 10px;
+      background: var(--surface-2); }
+
+    /* Индикатор «ИИ редактор» в шапке поста */
+    .editortag { margin-left: 6px; background: var(--surface-2);
+      border: 1px solid var(--border); color: var(--text-muted);
+      font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+      cursor: pointer; box-shadow: none; }
+    .editortag:hover { color: var(--text); border-color: var(--border-strong); }
+    .editortag.editing { color: var(--tg); border-color: color-mix(in srgb, var(--tg) 45%, var(--border));
+      background: color-mix(in srgb, var(--tg) 12%, transparent); }
+    .editortag.done { color: var(--accent2); border-color: color-mix(in srgb, var(--accent2) 40%, var(--border));
+      background: color-mix(in srgb, var(--accent2) 12%, transparent); }
+    /* «Светится» — активная редакция показывается */
+    .editortag.lit { color: #fff; border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+                  0 0 12px color-mix(in srgb, var(--accent) 45%, transparent); }
+    .addmenu-item.danger { color: var(--danger); }
+    .addmenu-item.danger:hover { background: color-mix(in srgb, var(--danger) 12%, var(--surface-2)); }
+    .addmenu-item:disabled { opacity: .55; cursor: default; }
+
     /* Узкие экраны: бренд и переключатель темы на одной строке,
        вкладки — на всю ширину ниже, чтобы ничего не вылезало. */
     @media (max-width: 560px) {
@@ -282,6 +306,9 @@
       .tabs { grid-column: 1 / -1; justify-self: center; margin-top: 4px; }
       .tab { padding: 8px 14px; }
       main { margin-top: 16px; }
+      .feed-filters { gap: 6px; }
+      .tag-filter-select { max-width: 100%; flex: 1 1 100%; }
+    }
       .feed-filters { gap: 6px; }
       .tag-filter-select { max-width: 100%; flex: 1 1 100%; }
     }

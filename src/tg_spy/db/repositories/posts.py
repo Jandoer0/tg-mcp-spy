@@ -124,3 +124,90 @@ def get_posts_by_tags(tags: list[str], limit: int = 50, offset: int = 0) -> list
     rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_post(post_id: int) -> Optional[dict]:
+    """Один пост по id (с полями ИИ-редактора)."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT id, source_id, ext_id, text, text_edited, editor_status, "
+        "editor_active, date, url FROM posts WHERE id = ?",
+        (int(post_id),),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_post_edited(post_id: int, text_edited: str) -> bool:
+    """Сохранить отредактированную ИИ-версию и выставить editor_status='done'."""
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE posts SET text_edited = ?, editor_status = 'done' WHERE id = ?",
+        (text_edited, int(post_id)),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def set_post_editor_status(post_id: int, status: str) -> bool:
+    """Установить editor_status (например 'editing' во время обработки)."""
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE posts SET editor_status = ? WHERE id = ?",
+        (status, int(post_id)),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def set_post_editor_active(post_id: int, active: bool) -> bool:
+    """Переключить показ оригинала/редакции (editor_active)."""
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE posts SET editor_active = ? WHERE id = ?",
+        (1 if active else 0, int(post_id)),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def delete_post_edited(post_id: int) -> bool:
+    """Удалить сохранённую ИИ-редакцию, сбросить флаги."""
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE posts SET text_edited = NULL, editor_status = 'none', "
+        "editor_active = 0 WHERE id = ?",
+        (int(post_id),),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def get_posts_editor_status(post_ids: list) -> dict:
+    """Вернуть {str(post_id): {status, active, has_edited}} для списка постов."""
+    out: dict[str, dict] = {
+        str(int(pid)): {"status": "none", "active": 0, "has_edited": False}
+        for pid in post_ids
+    }
+    if not post_ids:
+        return out
+    placeholders = ",".join("?" * len(post_ids))
+    conn = get_conn()
+    rows = conn.execute(
+        f"SELECT id, editor_status, editor_active, "
+        f"CASE WHEN text_edited IS NOT NULL THEN 1 ELSE 0 END AS has_edited "
+        f"FROM posts WHERE id IN ({placeholders})",
+        [int(p) for p in post_ids],
+    ).fetchall()
+    conn.close()
+    for r in rows:
+        out[str(int(r["id"]))] = {
+            "status": r["editor_status"] or "none",
+            "active": int(r["editor_active"] or 0),
+            "has_edited": bool(r["has_edited"]),
+        }
+    return out

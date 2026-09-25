@@ -7,6 +7,8 @@ export const state = {
   allTopics: [], // список тем (для выпадающего меню тегов и «＋»)
   currentTopic: "", // открытая тема
   postTags: {}, // кэш postId -> [{name, tag}] (теги постов, для мгновенной отрисовки)
+  // Состояние ИИ-редактора: postId -> {status, active, has_edited}
+  postEditor: {},
   // Пагинация ленты (бесконечная прокрутка).
   postsLimit: 50,
   postsOffset: 0,

@@ -29,6 +29,7 @@
       <button class="tab active" data-tab="posts">Лента новостей</button>
       <button class="tab" data-tab="subs">Подписки</button>
       <button class="tab" data-tab="mytopics">Мои темы</button>
+      <button class="tab" data-tab="settings">Настройки</button>
     </nav>
     <label class="theme-switch" title="Сменить тему">
       <input type="checkbox" id="themeToggle" aria-label="Тема">
@@ -124,12 +125,15 @@
           <button type="submit">Создать тему</button>
         </form>
       </div>
+    </section>
 
+    <!-- Вкладка 4: Настройки -->
+    <section id="tab-settings" class="tab-panel hidden">
       <div class="card" id="provider-card">
         <h2>Настройки провайдера ИИ</h2>
-        <p class="hint">Локальная модель (например Ollama) обслуживает «Мои темы». Укажите адрес
-          провайдера — сайт сам опросит его и подгрузит список доступных моделей. Настройки
-          применяются сразу (перезапуск не нужен).</p>
+        <p class="hint">Локальная модель (например Ollama) обслуживает «Мои темы» и
+          ИИ-редактор. Укажите адрес провайдера — сайт сам опросит его и подгрузит
+          список доступных моделей. Настройки применяются сразу (перезапуск не нужен).</p>
         <form id="form-provider" class="provider-form">
           <label class="field">
             <span class="field-label">Адрес провайдера (API URL)</span>
@@ -165,6 +169,30 @@
           </div>
         </form>
         <p class="config-status" id="tz-status"></p>
+      </div>
+
+      <div class="card" id="editor-card">
+        <h2>ИИ-редактор</h2>
+        <p class="hint">Привести текст карточек постов к единому стилю и вычистить мусор:
+          рекламу и призывы подписаться, повторяющиеся «хвосты»-подписи, декоративные
+          эмодзи, лишние пробелы и пустые строки. Фактура (имена, числа, цитаты)
+          сохраняется. Обработка идёт локальной моделью в фоне.</p>
+        <form id="form-editor" class="provider-form">
+          <label class="field">
+            <span class="field-label">Охват обработки</span>
+            <select name="scope" id="editor-scope">
+              <option value="1">За последний 1 день</option>
+              <option value="3">За последние 3 дня</option>
+              <option value="7" selected>За последние 7 дней</option>
+              <option value="30">За последние 30 дней</option>
+              <option value="0">Все посты</option>
+            </select>
+          </label>
+          <div class="provider-actions">
+            <button type="submit" id="editor-run">Запустить редактора</button>
+          </div>
+        </form>
+        <p class="config-status" id="editor-status"></p>
       </div>
     </section>
   </main>

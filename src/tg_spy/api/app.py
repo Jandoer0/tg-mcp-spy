@@ -18,6 +18,9 @@ from .web import (
     api_config_test,
     api_posts,
     api_posts_tags,
+    api_posts_editor,
+    api_editor_run,
+    api_editor_post,
     api_rsshub,
     api_refresh_posts,
     api_source_delete,
@@ -46,6 +49,10 @@ def register_web(mcp) -> None:
     mcp.custom_route("/api/sources/{name}", methods=["DELETE"])(api_source_delete)
     mcp.custom_route("/api/posts", methods=["GET"])(api_posts)
     mcp.custom_route("/api/posts/tags", methods=["GET"])(api_posts_tags)
+    mcp.custom_route("/api/posts/editor", methods=["GET"])(api_posts_editor)
+    mcp.custom_route("/api/editor/run", methods=["POST"])(api_editor_run)
+    mcp.custom_route("/api/editor/post/active", methods=["POST"])(api_editor_post)
+    mcp.custom_route("/api/editor/post", methods=["POST", "DELETE"])(api_editor_post)
     mcp.custom_route("/api/refresh/posts", methods=["POST"])(api_refresh_posts)
     mcp.custom_route("/api/rsshub", methods=["GET"])(api_rsshub)
 

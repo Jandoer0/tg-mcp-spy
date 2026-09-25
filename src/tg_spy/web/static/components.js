@@ -14,6 +14,25 @@ export function buildPostEl(p, topicsForPost = []) {
   const kindTag = p.kind
     ? `<span class="badge ${escapeHtml(p.kind)}">${escapeHtml(p.kind)}</span> `
     : "";
+
+  // ИИ-редактор: состояние и версия текста.
+  const editorStatus = p.editor_status || "none";
+  const editorActive = Number(p.editor_active || 0) === 1;
+  const hasEdited = !!(p.text_edited && String(p.text_edited).trim());
+  // Какой текст показываем: редакцию (если активна и есть), иначе оригинал.
+  const showEdited = editorActive && hasEdited;
+  const displayText = showEdited ? p.text_edited : p.text;
+  const editorState = editorStatus === "editing"
+    ? "editing"
+    : hasEdited
+    ? "done"
+    : "none";
+  const editorLabel =
+    editorState === "editing" ? "ИИ редактор…"
+    : editorState === "done" ? "ИИ редактор"
+    : "ИИ редактор";
+  const editorTag = `<button class="editortag ${editorState}${showEdited ? " lit" : ""}" title="ИИ-редактор: ${editorState === "editing" ? "обработка…" : editorState === "done" ? "готово" : "не обработано"}">✨ ${escapeHtml(editorLabel)}</button>`;
+
   // Теги пользователя (темы). Берём из кэша postTags (его наполняет
   // decoratePostTags), иначе из topicsForPost — чтобы чипы отрисовывались
   // сразу при любом фильтре, без ожидания второго запроса к API.
@@ -34,11 +53,16 @@ export function buildPostEl(p, topicsForPost = []) {
       `</div>`
     : "";
   el.innerHTML = `<div class="posthead">${kindTag}${srcTag}${escapeHtml(p.date || "—")} · ${url}
+        ${editorTag}
         <button class="addbtn" title="Добавить в тему">＋</button></div>
-      <div class="text">${renderBody(p.text)}</div>${tagsHtml}`;
+      <div class="text">${renderBody(displayText)}</div>${tagsHtml}`;
   el.querySelector(".addbtn").addEventListener("click", (e) => {
     e.stopPropagation();
     toggleAddMenu(el, p.id);
+  });
+  el.querySelector(".editortag").addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleEditorMenu(el, p);
   });
   return el;
 }
@@ -157,4 +181,144 @@ export function toggleAddMenu(el, postId) {
   menu.style.left = left + "px";
   menu.style.top = top + "px";
   setTimeout(() => document.addEventListener("click", _outsideAdd, true), 0);
+}
+
+// --------------------------------------------------------------------------- #
+// Меню ИИ-редактора поста: персональная обработка на лету.
+// --------------------------------------------------------------------------- #
+let editorMenuEl = null;
+function closeEditorMenu() {
+  if (editorMenuEl) {
+    editorMenuEl.remove();
+    editorMenuEl = null;
+  }
+  document.removeEventListener("click", _outsideEditor, true);
+}
+function _outsideEditor(e) {
+  if (editorMenuEl && !editorMenuEl.contains(e.target)) closeEditorMenu();
+}
+
+async function refreshPostEditor(el, postId) {
+  """Перечитать состояние редактора поста и обновить индикатор в DOM."""
+  try {
+    const data = await api(`/api/posts/editor?ids=${encodeURIComponent(postId)}`);
+    const st = data[String(postId)] || { status: "none", active: 0, has_edited: false };
+    state.postEditor[String(postId)] = st;
+    const tag = el.querySelector(".editortag");
+    const editing = st.status === "editing";
+    const lit = st.has_edited && st.active;
+    if (tag) {
+      tag.className = `editortag ${editing ? "editing" : st.has_edited ? "done" : "none"}${lit ? " lit" : ""}`;
+    }
+  } catch (_e) {
+    /* тихо */
+  }
+}
+
+export function toggleEditorMenu(el, p) {
+  if (editorMenuEl) {
+    closeEditorMenu();
+    return;
+  }
+  const postId = p.id;
+  const btn = el.querySelector(".editortag");
+  const rect = btn.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.className = "addmenu-pop addmenu-list";
+  const title = document.createElement("div");
+  title.className = "addmenu-title";
+  title.textContent = "ИИ-редактор поста:";
+  menu.appendChild(title);
+
+  const hasEdited = !!(p.text_edited && String(p.text_edited).trim());
+  const editorActive = Number(p.editor_active || 0) === 1;
+
+  const actions = [];
+  // 1) Запустить/перезапустить редактуру (если ещё не в процессе).
+  actions.push({
+    label: p.editor_status === "editing" ? "Редактура выполняется…" : "Отредактировать пост",
+    cls: p.editor_status === "editing" ? "disabled" : "",
+    run: async () => {
+      if (p.editor_status === "editing") return;
+      try {
+        await api(`/api/editor/post?post_id=${encodeURIComponent(postId)}`, { method: "POST" });
+        p.editor_status = "editing";
+        const tag = el.querySelector(".editortag");
+        if (tag) tag.className = "editortag editing";
+        toast("ИИ-редактор обрабатывает пост…");
+      } catch (e) { toast(e.message, true); }
+    },
+  });
+  // 2) Показать оригинал / редакцию.
+  if (hasEdited) {
+    actions.push({
+      label: editorActive ? "Показать оригинал" : "Показать отредактированное",
+      cls: "",
+      run: async () => {
+        try {
+          const active = !editorActive;
+          await api(`/api/editor/post/active?post_id=${encodeURIComponent(postId)}&active=${active ? 1 : 0}`, { method: "POST" });
+          p.editor_active = active ? 1 : 0;
+          const textEl = el.querySelector(".text");
+          if (textEl) textEl.innerHTML = renderBody(active ? p.text_edited : p.text);
+          const tag = el.querySelector(".editortag");
+          if (tag) tag.classList.toggle("lit", active);
+          toast(active ? "Показана редакция ИИ" : "Показан оригинал");
+        } catch (e) { toast(e.message, true); }
+      },
+    });
+  }
+  // 3) Удалить ИИ-редакцию.
+  if (hasEdited) {
+    actions.push({
+      label: "Удалить ИИ-редакцию",
+      cls: "danger",
+      run: async () => {
+        if (!confirm("Удалить сохранённую ИИ-редакцию этого поста?")) return;
+        try {
+          await api(`/api/editor/post?post_id=${encodeURIComponent(postId)}`, { method: "DELETE" });
+          p.text_edited = null;
+          p.editor_status = "none";
+          p.editor_active = 0;
+          const textEl = el.querySelector(".text");
+          if (textEl) textEl.innerHTML = renderBody(p.text);
+          const tag = el.querySelector(".editortag");
+          if (tag) tag.className = "editortag none";
+          toast("ИИ-редакция удалена");
+        } catch (e) { toast(e.message, true); }
+      },
+    });
+  }
+
+  const list = document.createElement("div");
+  list.className = "addmenu-items";
+  for (const a of actions) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "addmenu-item" + (a.cls ? " " + a.cls : "");
+    item.textContent = a.label;
+    if (!a.cls.includes("disabled")) {
+      item.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        await a.run();
+        closeEditorMenu();
+      });
+    } else {
+      item.disabled = true;
+    }
+    list.appendChild(item);
+  }
+  menu.appendChild(list);
+  document.body.appendChild(menu);
+  editorMenuEl = menu;
+  const mw = menu.offsetWidth,
+    mh = menu.offsetHeight;
+  let left = rect.left;
+  let top = rect.bottom + 6;
+  left = Math.min(left, window.innerWidth - mw - 8);
+  left = Math.max(left, 8);
+  top = Math.min(top, window.innerHeight - mh - 8);
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  setTimeout(() => document.addEventListener("click", _outsideEditor, true), 0);
 }

@@ -364,3 +364,37 @@ export function initTopics() {
   // может находиться во вкладке, которая ещё не открывалась).
   populateTimezones();
 }
+
+// ----- ИИ-редактор (глобальная/пакетная обработка) -----
+export function initEditorCard() {
+  const form = document.getElementById("form-editor");
+  const status = document.getElementById("editor-status");
+  if (!form || form.dataset.wired) return;
+  form.dataset.wired = "1";
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const scope = parseInt(form.querySelector("[name=scope]").value, 10) || 0;
+    if (status) {
+      status.className = "config-status";
+      status.textContent = "ИИ-редактор запущен, обработка в фоне…";
+    }
+    try {
+      const r = await api("/api/editor/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: scope }),
+      });
+      toast(r.message || "ИИ-редактор запущен");
+      if (status) {
+        status.className = "config-status ok";
+        status.textContent = "Запущено. Готово — обновите ленту новостей, чтобы увидеть результат.";
+      }
+    } catch (err) {
+      toast(err.message, true);
+      if (status) {
+        status.className = "config-status err";
+        status.textContent = "Ошибка: " + err.message;
+      }
+    }
+  });
+}

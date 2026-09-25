@@ -30,6 +30,7 @@ from ..db import (
 from ..ingest import rss
 from ..ingest.refresh import refresh_all_sources
 from ..topics import agent, service
+from ..topics import editor as editor_svc
 from ..config import get_provider, load_config
 
 WEB_DIR = Path(__file__).parent.parent / "web" / "static"
@@ -104,6 +105,21 @@ async def api_source_delete(request: Request) -> JSONResponse:
 # --------------------------------------------------------------------------- #
 # Посты
 # --------------------------------------------------------------------------- #
+def _post_json(p: dict) -> dict:
+    """Сериализовать пост для фронта, включая поля ИИ-редактора."""
+    return {
+        "id": p["id"],
+        "date": p["date"],
+        "text": p["text"],
+        "text_edited": p.get("text_edited"),
+        "editor_status": p.get("editor_status") or "none",
+        "editor_active": int(p.get("editor_active") or 0),
+        "url": p["url"],
+        "source": p.get("source", ""),
+        "kind": p.get("kind", ""),
+    }
+
+
 async def api_posts(request: Request) -> JSONResponse:
     source = request.query_params.get("source", "").strip().lower().lstrip("@")
     kind = request.query_params.get("kind", "").strip().lower()
@@ -131,13 +147,7 @@ async def api_posts(request: Request) -> JSONResponse:
                 {
                     "global": True,
                     "tags": tag_list,
-                    "posts": [
-                        {
-                            "id": p["id"], "date": p["date"], "text": p["text"],
-                            "url": p["url"], "source": p["source"], "kind": p["kind"],
-                        }
-                        for p in rows
-                    ],
+                    "posts": [_post_json(p) for p in rows],
                 }
             )
 
@@ -147,13 +157,7 @@ async def api_posts(request: Request) -> JSONResponse:
             {
                 "global": True,
                 "tag": tag,
-                "posts": [
-                    {
-                        "id": p["id"], "date": p["date"], "text": p["text"],
-                        "url": p["url"], "source": p["source"], "kind": p["kind"],
-                    }
-                    for p in rows
-                ],
+                "posts": [_post_json(p) for p in rows],
             }
         )
 
@@ -165,10 +169,7 @@ async def api_posts(request: Request) -> JSONResponse:
         return JSONResponse(
             {
                 "source": source, "kind": src["kind"], "global": False,
-                "posts": [
-                    {"id": p["id"], "date": p["date"], "text": p["text"], "url": p["url"]}
-                    for p in rows
-                ],
+                "posts": [_post_json(p) for p in rows],
             }
         )
 
@@ -177,13 +178,7 @@ async def api_posts(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "global": True, "kind": kind,
-            "posts": [
-                {
-                    "id": p["id"], "date": p["date"], "text": p["text"],
-                    "url": p["url"], "source": p["source"], "kind": p["kind"],
-                }
-                for p in rows
-            ],
+            "posts": [_post_json(p) for p in rows],
         }
     )
 
@@ -230,6 +225,76 @@ async def api_posts_tags(request: Request) -> JSONResponse:
 
     mapping = get_post_topics(ids)
     return JSONResponse({str(k): v for k, v in mapping.items()})
+
+
+async def api_posts_editor(request: Request) -> JSONResponse:
+    """Состояние ИИ-редактора для списка постов.
+
+    query: ?ids=1,2,3  →  {"1": {"status", "active", "has_edited"}, ...}
+    """
+    raw = request.query_params.get("ids", "").strip()
+    if not raw:
+        return JSONResponse({})
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    if not ids:
+        return JSONResponse({})
+    from ..db import get_posts_editor_status
+
+    return JSONResponse(get_posts_editor_status(ids))
+
+
+async def api_editor_run(request: Request) -> JSONResponse:
+    """Пакетная ИИ-редактура постов за последние N дней (или все).
+
+    body: {"days": 7}  (0 или отсутствие — все посты). Запуск в фоне.
+    """
+    body = await _json(request, default={})
+    days = body.get("days")
+    if days in (None, "", 0):
+        days = None
+    else:
+        try:
+            days = int(days)
+            days = max(0, min(days, 365))
+        except (TypeError, ValueError):
+            days = None
+    editor_svc.run_editor_async(days=days)
+    return JSONResponse({"ok": True, "message": "ИИ-редактор запущен (пакетная обработка)"})
+
+
+async def api_editor_post(request: Request) -> JSONResponse:
+    """Персональная редактура одного поста и переключение состояния.
+
+    - POST   /api/editor/post?post_id=  → запустить редактуру поста (фон),
+    - POST   /api/editor/post/active?post_id=&active=1  → показать оригинал/редакцию,
+    - DELETE /api/editor/post?post_id=  → удалить сохранённую редакцию.
+    """
+    post_id_raw = request.query_params.get("post_id", "").strip()
+    if not post_id_raw.isdigit():
+        return JSONResponse({"error": "Укажите post_id"}, status_code=400)
+    post_id = int(post_id_raw)
+
+    # Переключение «показывать редакцию» (active) — отдельный маршрут
+    # /api/editor/post/active?post_id=&active=1.
+    if request.url.path.rstrip("/").endswith("/active"):
+        active_raw = str(request.query_params.get("active", "1") or "1").strip()
+        active = active_raw not in ("0", "false", "off", "no")
+        if not editor_svc.set_active(post_id, active):
+            return JSONResponse({"error": "Пост не найден"}, status_code=404)
+        return JSONResponse({"ok": True, "active": active})
+
+    if request.method == "DELETE":
+        if not editor_svc.remove_edition(post_id):
+            return JSONResponse({"error": "Пост не найден"}, status_code=404)
+        return JSONResponse({"ok": True})
+
+    # POST — запустить редактуру.
+    editor_svc.edit_post_async(post_id)
+    return JSONResponse({"ok": True, "message": "Редактура поста запущена"})
 
 
 # --------------------------------------------------------------------------- #
