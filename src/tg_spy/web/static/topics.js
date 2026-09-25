@@ -115,25 +115,30 @@ export async function openTopicInLenta(tag) {
 
 // ----- Настройки провайдера / модели ИИ -----
 export async function loadConfig() {
-  const card = document.getElementById("provider-card");
-  if (!card) return;
+  const card = document.getElementById("classifier-card");
+  if (!card) {
+    console.error("Элемент classifier-card не найден в DOM");
+    return;
+  }
   try {
     const cfg = await api("/api/config");
+    console.log("Загруженный конфиг:", cfg);
     
     // Настройки классификатора
     const classifierProv = (cfg.classifier && cfg.classifier.provider) || {};
-    card.querySelector("[name=baseUrl]").value = classifierProv.baseUrl || "";
-    card.querySelector("[name=apiKey]").value = classifierProv.apiKey || "";
-    card.querySelector("[name=model]").value = (cfg.classifier && cfg.classifier.model) || "";
+    const baseUrlInput = card.querySelector("[name=baseUrl]");
+    const apiKeyInput = card.querySelector("[name=apiKey]");
+    const modelInput = card.querySelector("[name=model]");
+    
+    if (baseUrlInput) baseUrlInput.value = classifierProv.baseUrl || "";
+    if (apiKeyInput) apiKeyInput.value = classifierProv.apiKey || "";
+    if (modelInput) modelInput.value = (cfg.classifier && cfg.classifier.model) || "";
     
     // Часовой пояс
     state.timezone = (cfg && cfg.timezone) || "";
     populateTimezones();
     const tzSel = document.getElementById("cfg-timezone");
     if (tzSel) tzSel.value = state.timezone || "";
-    
-    // Подгрузить список моделей классификатора (по его baseUrl)
-    await fetchModels(false);
     
     // Настройки редактора
     const editorProv = (cfg.editor && cfg.editor.provider) || {};
@@ -147,10 +152,11 @@ export async function loadConfig() {
         editorModelSel.value = (cfg.editor && cfg.editor.model) || "";
     }
     
-    // Подгрузить список моделей редактора (по его baseUrl)
+    // Теперь, когда все поля заполнены, загружаем списки моделей
+    await fetchModels(false);
     await populateEditorModels(false);
-  } catch (_e) {
-    console.warn("Ошибка при загрузке конфига:", _e);
+  } catch (e) {
+    console.error("Ошибка при загрузке конфига:", e);
   }
 }
 
@@ -185,10 +191,16 @@ function populateTimezones() {
 // Опросить провайдера и заполнить <datalist> моделями.
 // notify=true — показать статус (при нажатии кнопки), иначе тихо.
 async function fetchModels(notify = true) {
-  const card = document.getElementById("provider-card");
+  const card = document.getElementById("classifier-card");
   const st = document.getElementById("config-status");
-  const baseUrl = card.querySelector("[name=baseUrl]").value.trim();
-  const apiKey = card.querySelector("[name=apiKey]").value.trim();
+  if (!card) return;
+  
+  const baseUrlInput = card.querySelector("[name=baseUrl]");
+  const apiKeyInput = card.querySelector("[name=apiKey]");
+  
+  const baseUrl = baseUrlInput ? baseUrlInput.value.trim() : "";
+  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "";
+  
   if (!baseUrl) {
     if (notify) st.textContent = "Сначала укажите адрес провайдера (API URL).";
     return;
@@ -272,8 +284,9 @@ async function populateEditorModels(notify = true) {
 
 async function saveConfig(e) {
   if (e) e.preventDefault();
-  const card = document.getElementById("provider-card");
+  const card = document.getElementById("classifier-card");
   const st = document.getElementById("config-status");
+  if (!card) return;
   
   // Данные классификатора
   const classifierPayload = {
