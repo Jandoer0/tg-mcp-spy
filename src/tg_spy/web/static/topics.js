@@ -503,13 +503,8 @@ export function initEditorCard() {
   // подгружаются из серверного конфига функцией loadConfig() — дублирующая
   // загрузка из localStorage здесь не нужна и только мешает (гонка записей).
   // Кнопка обновления списка моделей
-  const fetchBtn = document.getElementById("editor-fetch-models");
-  if (fetchBtn) {
-    fetchBtn.addEventListener("click", async () => {
-      await fetchEditorModels(true);
-    });
-  }
-
+  // Убрана, теперь выполняется внутри testBtn.addEventListener
+  
   // Кнопка сохранения настроек
   const saveBtn = document.getElementById("editor-save");
   if (saveBtn) {
@@ -539,7 +534,7 @@ export function initEditorCard() {
         return;
       }
       
-      if (status) status.textContent = "Проверка связи…";
+      if (status) status.textContent = "Проверка связи и загрузка моделей…";
       try {
         const r = await api("/api/config/test", { 
           method: "POST",
@@ -552,6 +547,8 @@ export function initEditorCard() {
             status.textContent = r.message || "Связь установлена.";
           }
           toast("Связь с моделью редактора установлена");
+          // Одновременно загружаем список моделей
+          await fetchEditorModels(false);
         } else {
           if (status) {
             status.className = "config-status err";
