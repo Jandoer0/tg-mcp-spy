@@ -197,18 +197,22 @@ mcp_servers:
 | `DB_PATH` | `/app/data/telegram_cache.db` | путь к базе |
 | `RSSHUB_BASE_URL` | `https://rsshub.app` | база RSSHub (можно своя) |
 | `MAX_DB_BYTES` | `104857600` (100 МБ) | максимальный размер базы; при превышении старые посты удаляются |
-| `AGENT_CONFIG` | `config.json` (рядом с кодом) | путь к конфигу провайдера/агента |
-| `AGENT_PROVIDER` | `ollama` | выбранный провайдер из `config.json` |
-| `AGENT_MODEL` | `qwen3:4b` | имя локальной модели (должна быть загружена в Ollama) |
-| `AGENT_BASE_URL` | `http://127.0.0.1:11434/v1` | эндпоинт OpenAI-совместимого API провайдера |
-| `AGENT_API_KEY` | `ollama` | ключ API провайдера (для Ollama — любой) |
+| `AGENT_CONFIG` | `config.json` | путь к конфигу провайдера/агента |
+| `AGENT_TIMEZONE` | (локальное) | часовой пояс (например, `Asia/Novosibirsk`) |
 | `AGENT_SCHEDULE_ENABLED` | `true` | вкл/выкл фоновый планировщик (авто-обновление + агент) |
 | `AGENT_FEED_REFRESH_MINUTES` | `60` | период авто-обновления ленты (мин) |
-| `AGENT_TOPIC_MINUTES` | `30` | период запуска агента по теме (мин) |
-| `AGENT_RETRIES` | `2` | число повторных попыток обращения к модели при сбоях/таймаутах |
-| `AGENT_RETRY_BACKOFF` | `1.5` | пауза между попытками (сек), растёт линейно (1×, 2×, …) |
-| `AGENT_BATCH` | `30` | сколько постов за один вызов модели (пачка); меньше — короче запрос и меньше шанс на таймаут |
-| `AGENT_REQUEST_TIMEOUT` | `300.0` | таймаут одного запроса к модели (сек) |
+| `AGENT_TOPIC_MINUTES` | `1440` | период запуска агента по теме по умолчанию (мин) |
+| `AGENT_SYSTEM_PROMPT` | (см. код) | системный промпт для классификатора |
+| `AGENT_CLASSIFIER_URL` | `http://host.containers.internal:11434/v1` | API URL для классификатора |
+| `AGENT_CLASSIFIER_KEY` | `ollama` | API ключ для классификатора |
+| `AGENT_CLASSIFIER_MODEL` | `qwen3:4b` | модель для классификатора |
+| `AGENT_EDITOR_URL` | `http://host.containers.internal:11434/v1` | API URL для ИИ-редактора |
+| `AGENT_EDITOR_KEY` | `ollama` | API ключ для ИИ-редактора |
+| `AGENT_EDITOR_MODEL` | `qwen3:4b` | модель для ИИ-редактора |
+| `AGENT_RETRIES` | `2` | число повторных попыток обращения к модели |
+| `AGENT_RETRY_BACKOFF` | `1.5` | пауза между попытками (сек) |
+| `AGENT_BATCH` | `30` | размер пачки постов за один запрос к модели |
+| `AGENT_REQUEST_TIMEOUT` | `300.0` | таймаут запроса к модели (сек) |
 
 ## Ротация базы данных
 
