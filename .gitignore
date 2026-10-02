@@ -19,6 +19,7 @@ wheels/
 /data/
 PROMT.md
 tg-mcp-spy.container
+ARCHITECTURE.md
 
 # uv lock не используем (ставим через pip)
 uv.lock

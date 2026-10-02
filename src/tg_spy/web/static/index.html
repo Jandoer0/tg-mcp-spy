@@ -155,22 +155,6 @@
         <p class="config-status" id="config-status"></p>
       </div>
 
-      <div class="card" id="tz-card">
-        <h2>Настройка часового пояса</h2>
-        <p class="hint">Часовой пояс для отображения времени запуска агента в «Мои темы».
-          «Авто» — местное время браузера.</p>
-        <form id="form-timezone" class="provider-form">
-          <label class="field">
-            <span class="field-label">Часовой пояс</span>
-            <select name="timezone" id="cfg-timezone"></select>
-          </label>
-          <div class="provider-actions">
-            <button type="submit" id="config-save-tz">Сохранить</button>
-          </div>
-        </form>
-        <p class="config-status" id="tz-status"></p>
-      </div>
-
       <div class="card" id="editor-card">
         <h2>ИИ редактор</h2>
         <p class="hint">Привести текст карточек постов к единому стилю и вычистить мусор:
@@ -208,6 +192,25 @@
           </div>
         </form>
         <p class="config-status" id="editor-status"></p>
+      </div>
+
+      <div class="card" id="tz-card">
+        <h2>Прочие параметры</h2>
+        <p class="hint">Настройки системы и отображения.</p>
+        <form id="form-timezone" class="provider-form">
+          <label class="field">
+            <span class="field-label">Часовой пояс</span>
+            <select name="timezone" id="cfg-timezone"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Интервал обновления новостей (мин)</span>
+            <input name="feedRefreshMinutes" id="cfg-feed-refresh" type="number" min="1" placeholder="60" />
+          </label>
+          <div class="provider-actions">
+            <button type="submit" id="config-save-tz">Сохранить</button>
+          </div>
+        </form>
+        <p class="config-status" id="tz-status"></p>
       </div>
     </section>
   </main>

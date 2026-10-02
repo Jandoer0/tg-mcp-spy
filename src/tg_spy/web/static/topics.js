@@ -140,6 +140,12 @@ export async function loadConfig() {
     const tzSel = document.getElementById("cfg-timezone");
     if (tzSel) tzSel.value = state.timezone || "";
     
+    // Интервал обновления
+    const refreshInput = document.getElementById("cfg-feed-refresh");
+    if (refreshInput) {
+      refreshInput.value = (cfg && cfg.schedule && cfg.schedule.feedRefreshMinutes) || 60;
+    }
+    
     // Настройки редактора
     const editorProv = (cfg.editor && cfg.editor.provider) || {};
     const editorBaseUrlInput = document.getElementById("editor-baseUrl");
@@ -458,16 +464,22 @@ export function initTopics() {
     tzForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const tz = tzForm.querySelector("[name=timezone]").value || "";
+      const refreshMin = tzForm.querySelector("[name=feedRefreshMinutes]").value || "60";
       try {
         await api("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ timezone: tz }),
+          body: JSON.stringify({ 
+            timezone: tz,
+            schedule: {
+              feedRefreshMinutes: parseInt(refreshMin, 10) || 60
+            }
+          }),
         });
         state.timezone = tz;
         tzStatus.className = "config-status ok";
         tzStatus.textContent = "Сохранено. Применяется сразу.";
-        toast("Часовой пояс сохранён");
+        toast("Параметры сохранены");
       } catch (err) {
         tzStatus.className = "config-status err";
         tzStatus.textContent = "Ошибка: " + err.message;
