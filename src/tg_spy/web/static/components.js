@@ -268,22 +268,24 @@ export function toggleEditorMenu(el, p) {
   }
 
   const actions = [];
-  // 1) Запустить/перезапустить редактуру (если ещё не в процессе).
-  actions.push({
-    label: p.editor_status === "editing" ? "Редактура выполняется…" : "Отредактировать пост",
-    cls: p.editor_status === "editing" ? "disabled" : "",
-    run: async () => {
-      if (p.editor_status === "editing") return;
-      try {
-        await api(`/api/editor/post?post_id=${encodeURIComponent(postId)}`, { method: "POST" });
-        p.editor_status = "editing";
-        const tag = el.querySelector(".editortag");
-        if (tag) tag.className = "editortag editing";
-        toast("ИИ-редактор обрабатывает пост…");
-        pollUntilDone();
-      } catch (e) { toast(e.message, true); }
-    },
-  });
+  // 1) Запустить редактуру (только если пост ещё не отредактирован).
+  if (!hasEdited) {
+    actions.push({
+      label: p.editor_status === "editing" ? "Редактура выполняется…" : "Отредактировать пост",
+      cls: p.editor_status === "editing" ? "disabled" : "",
+      run: async () => {
+        if (p.editor_status === "editing") return;
+        try {
+          await api(`/api/editor/post?post_id=${encodeURIComponent(postId)}`, { method: "POST" });
+          p.editor_status = "editing";
+          const tag = el.querySelector(".editortag");
+          if (tag) tag.className = "editortag editing";
+          toast("ИИ-редактор обрабатывает пост…");
+          pollUntilDone();
+        } catch (e) { toast(e.message, true); }
+      },
+    });
+  }
   // 2) Показать оригинал / редакцию.
   if (hasEdited) {
     actions.push({
