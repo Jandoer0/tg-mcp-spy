@@ -41,7 +41,8 @@ def get_posts(source_ids: list[int], since_date: str, limit: int = 50, offset: i
     n = len(source_ids)
     placeholders = ",".join(["?"] * n)
     sql = """
-        SELECT p.id, s.name AS source, s.kind, p.ext_id, p.text, p.date, p.url
+        SELECT p.id, s.name AS source, s.kind, p.ext_id, p.text, p.date, p.url,
+               p.text_edited, p.editor_status, p.editor_active
         FROM posts p JOIN sources s ON s.id = p.source_id
         WHERE s.id IN (%s)
           AND p.date >= ?
@@ -77,7 +78,8 @@ def get_posts_by_tag(tag: str, limit: int = 50, offset: int = 0) -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
         """SELECT p.id AS id, p.source_id, p.ext_id, s.name AS source,
-                  s.kind AS kind, p.text, p.date, p.url, pt.mode
+                  s.kind AS kind, p.text, p.date, p.url, pt.mode,
+                  p.text_edited, p.editor_status, p.editor_active
            FROM posts_tags pt
            JOIN posts p ON p.id = pt.post_id
            JOIN sources s ON s.id = p.source_id
@@ -113,7 +115,8 @@ def get_posts_by_tags(tags: list[str], limit: int = 50, offset: int = 0) -> list
     where = " AND ".join(in_clauses)
     sql = f"""
         SELECT p.id AS id, p.source_id, p.ext_id, s.name AS source,
-               s.kind AS kind, p.text, p.date, p.url, '' AS mode
+               s.kind AS kind, p.text, p.date, p.url, '' AS mode,
+               p.text_edited, p.editor_status, p.editor_active
         FROM posts p
         JOIN sources s ON s.id = p.source_id
         WHERE {where}
