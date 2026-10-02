@@ -290,4 +290,34 @@ export function initPosts() {
       y + window.innerHeight >= document.documentElement.scrollHeight - 400;
     if (nearBottom) loadMorePosts();
   });
+
+  // Переключатель ИИ-классификатора
+  const classifierToggle = document.getElementById("classifier-toggle");
+  if (classifierToggle) {
+    // Загрузка текущего состояния при инициализации
+    api("/api/config/classifier/status")
+      .then((data) => {
+        classifierToggle.checked = !!data.enabled;
+      })
+      .catch(() => {
+        // Если API нет или ошибка, оставляем как есть (по умолчанию выкл)
+        classifierToggle.checked = false;
+      });
+
+    classifierToggle.addEventListener("change", async () => {
+      const enabled = classifierToggle.checked;
+      try {
+        await api("/api/config/classifier/toggle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        toast(enabled ? "ИИ-классификатор включен" : "ИИ-классификатор выключен");
+      } catch (e) {
+        toast(e.message, true);
+        // Откат состояния при ошибке
+        classifierToggle.checked = !enabled;
+      }
+    });
+  }
 }

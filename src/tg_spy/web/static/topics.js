@@ -490,6 +490,34 @@ export function initTopics() {
   // Подстраховка: заполнить <select> часовых поясов при загрузке (карточка
   // может находиться во вкладке, которая ещё не открывалась).
   populateTimezones();
+
+  // Переключатель ИИ-классификатора в шапке ленты
+  const classifierToggle = document.getElementById("classifier-toggle");
+  if (classifierToggle) {
+    // Загрузка состояния из конфига
+    api("/api/config").then((cfg) => {
+      const isEnabled = cfg && cfg.schedule && cfg.schedule.enabled;
+      classifierToggle.checked = !!isEnabled;
+    }).catch(() => {});
+
+    // Обработчик переключения
+    classifierToggle.addEventListener("change", async () => {
+      const enabled = classifierToggle.checked;
+      try {
+        await api("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            schedule: { enabled }
+          }),
+        });
+        toast(enabled ? "ИИ-классификатор включен" : "ИИ-классификатор выключен");
+      } catch (e) {
+        toast(e.message, true);
+        classifierToggle.checked = !enabled; // откат при ошибке
+      }
+    });
+  }
 }
 
 // ----- ИИ-редактор (глобальная/пакетная обработка) -----

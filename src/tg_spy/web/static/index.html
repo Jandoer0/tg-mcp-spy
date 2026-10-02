@@ -48,7 +48,14 @@
     <!-- Вкладка 1: последние посты (главная) -->
     <section id="tab-posts" class="tab-panel">
       <div class="card">
-        <h2>Лента новостей <span id="posts-source-label" class="hint" style="margin:0;font-weight:400;"></span> <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button></h2>
+        <h2>Лента новостей <span id="posts-source-label" class="hint" style="margin:0;font-weight:400;"></span> <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button>
+          <label class="ai-toggle" title="Включить ИИ-классификатор">
+            <input type="checkbox" id="classifier-toggle">
+            <span class="toggle-track">
+              <span class="toggle-thumb">🤖</span>
+            </span>
+          </label>
+        </h2>
         <div class="feed-filters">
           <button class="chip active" data-kind="">Все</button>
           <button class="chip" data-kind="telegram">Telegram</button>
