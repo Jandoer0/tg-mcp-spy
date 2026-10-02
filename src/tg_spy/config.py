@@ -196,23 +196,26 @@ def load_config() -> AppConfig:
 
     # Переопределения через переменные окружения.
     # Классификатор
-    if os.environ.get("AGENT_CLASSIFIER_PROVIDER_URL"):
-        cfg.classifier.base_url = os.environ["AGENT_CLASSIFIER_PROVIDER_URL"]
-    if os.environ.get("AGENT_CLASSIFIER_API_KEY"):
-        cfg.classifier.api_key = os.environ["AGENT_CLASSIFIER_API_KEY"]
+    if os.environ.get("AGENT_CLASSIFIER_URL"):
+        cfg.classifier.base_url = os.environ["AGENT_CLASSIFIER_URL"]
+    if os.environ.get("AGENT_CLASSIFIER_KEY"):
+        cfg.classifier.api_key = os.environ["AGENT_CLASSIFIER_KEY"]
     if os.environ.get("AGENT_CLASSIFIER_MODEL"):
         cfg.classifier_model = os.environ["AGENT_CLASSIFIER_MODEL"]
     
     # Редактор
-    if os.environ.get("AGENT_EDITOR_PROVIDER_URL"):
-        cfg.editor.base_url = os.environ["AGENT_EDITOR_PROVIDER_URL"]
-    if os.environ.get("AGENT_EDITOR_API_KEY"):
-        cfg.editor.api_key = os.environ["AGENT_EDITOR_API_KEY"]
+    if os.environ.get("AGENT_EDITOR_URL"):
+        cfg.editor.base_url = os.environ["AGENT_EDITOR_URL"]
+    if os.environ.get("AGENT_EDITOR_KEY"):
+        cfg.editor.api_key = os.environ["AGENT_EDITOR_KEY"]
     if os.environ.get("AGENT_EDITOR_MODEL"):
         cfg.editor_model = os.environ["AGENT_EDITOR_MODEL"]
 
     if os.environ.get("AGENT_SYSTEM_PROMPT"):
         cfg.system_prompt = os.environ["AGENT_SYSTEM_PROMPT"]
+    
+    if os.environ.get("AGENT_TIMEZONE"):
+        cfg.timezone = os.environ["AGENT_TIMEZONE"]
 
     sched = cfg.schedule
     env_enabled = os.environ.get("AGENT_SCHEDULE_ENABLED")
