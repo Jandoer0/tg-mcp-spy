@@ -107,7 +107,7 @@ async def api_source_delete(request: Request) -> JSONResponse:
 # --------------------------------------------------------------------------- #
 def _post_json(p: dict) -> dict:
     """Сериализовать пост для фронта, включая поля ИИ-редактора."""
-    return {
+    res = {
         "id": p["id"],
         "date": p["date"],
         "text": p["text"],
@@ -118,6 +118,11 @@ def _post_json(p: dict) -> dict:
         "source": p.get("source", ""),
         "kind": p.get("kind", ""),
     }
+    # Лог для отладки конкретного проблемного поста
+    if res["id"] == 210653:
+        import logging
+        logging.getLogger(__name__).info(f"DEBUG POST 210653: edited={bool(res['text_edited'])}, active={res['editor_active']}")
+    return res
 
 
 async def api_posts(request: Request) -> JSONResponse:
