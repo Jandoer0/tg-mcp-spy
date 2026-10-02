@@ -102,15 +102,17 @@ def set_topic_active(name: str, active: bool) -> bool:
 
 
 def update_topic_run(topic_id: int, last_post_id: Optional[int] = None) -> None:
+    import datetime
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_conn()
     if last_post_id is not None:
         conn.execute(
-            "UPDATE topics SET last_post_id = ?, last_run_at = datetime('now') WHERE id = ?",
-            (int(last_post_id), topic_id),
+            "UPDATE topics SET last_post_id = ?, last_run_at = ? WHERE id = ?",
+            (int(last_post_id), now_iso, topic_id),
         )
     else:
         conn.execute(
-            "UPDATE topics SET last_run_at = datetime('now') WHERE id = ?", (topic_id,)
+            "UPDATE topics SET last_run_at = ? WHERE id = ?", (now_iso, topic_id)
         )
     conn.commit()
     conn.close()
