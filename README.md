@@ -227,3 +227,4 @@ mcp_servers:
 - RSS/RSSHub — через скачирование и разбор RSS/Atom (\`feedparser\`).
 
 Один контейнер, один порт: на нём и MCP (\`/mcp\`), и веб-интерфейс (\`/ui\`).
+Update trigger
