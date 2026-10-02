@@ -21,6 +21,7 @@ from ..db import (
     set_post_edited,
     set_post_editor_status,
 )
+from ..config import load_config
 from . import agent
 
 logger = logging.getLogger(__name__)
