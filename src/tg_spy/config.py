@@ -55,16 +55,22 @@ class ScheduleConfig(BaseModel):
     topic_minutes: int = 1440
 
 
-class AppConfig(BaseModel):
-    """Итоговый конфиг приложения."""
-
-    # Полные настройки классификатора
-    classifier: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
+class ClassifierConfig(BaseModel):
+    """Конфигурация классификатора с флагом включения."""
+    provider: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
         base_url="http://host.containers.internal:11434/v1",
         api_key="ollama",
         compat=ProviderCompat(disable_thinking=True)
     ))
-    classifier_model: str = "qwen3:4b"
+    model: str = "qwen3:4b"
+    enabled: bool = True
+
+
+class AppConfig(BaseModel):
+    """Итоговый конфиг приложения."""
+
+    # Полные настройки классификатора
+    classifier: ClassifierConfig = Field(default_factory=ClassifierConfig)
     
     # Полные настройки редактора
     editor: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
@@ -103,10 +109,24 @@ class AppConfig(BaseModel):
                 },
             }
 
+        classifier = d["classifier"]
+        # Поддержка старой и новой структуры классификатора
+        if "provider" in classifier:
+             # Новая структура ClassifierConfig
+             c_prov = classifier["provider"]
+             c_model = classifier["model"]
+             c_enabled = classifier.get("enabled", True)
+        else:
+             # Старая структура (если вдруг осталась)
+             c_prov = classifier
+             c_model = d.get("classifier_model", "qwen3:4b")
+             c_enabled = True
+
         return {
             "classifier": {
-                "provider": prov_to_dict(d["classifier"]),
-                "model": d["classifier_model"],
+                "provider": prov_to_dict(c_prov),
+                "model": c_model,
+                "enabled": c_enabled,
             },
             "editor": {
                 "provider": prov_to_dict(d["editor"]),
@@ -147,10 +167,22 @@ class AppConfig(BaseModel):
         classifier_data = data.get("classifier") or {}
         editor_data = data.get("editor") or {}
         
+        # Обработка классификатора (поддержка старой и новой структуры)
+        if "provider" in classifier_data:
+            # Новая структура с вложенным provider
+            c_provider = dict_to_prov(classifier_data.get("provider"))
+            c_model = classifier_data.get("model", "qwen3:4b")
+            c_enabled = classifier_data.get("enabled", True)
+            classifier_cfg = ClassifierConfig(provider=c_provider, model=c_model, enabled=c_enabled)
+        else:
+            # Старая структура (плоская)
+            c_provider = dict_to_prov(classifier_data)
+            c_model = data.get("classifier_model", "qwen3:4b")
+            classifier_cfg = ClassifierConfig(provider=c_provider, model=c_model, enabled=True)
+        
         sched = data.get("schedule") or {}
         return cls(
-            classifier=dict_to_prov(classifier_data.get("provider")),
-            classifier_model=classifier_data.get("model", "qwen3:4b"),
+            classifier=classifier_cfg,
             editor=dict_to_prov(editor_data.get("provider")),
             editor_model=editor_data.get("model", "qwen3:4b"),
             timezone=data.get("timezone", ""),
@@ -210,11 +242,11 @@ def load_config() -> AppConfig:
     # 3. Переопределяем через переменные окружения (самый высокий приоритет)
     # Классификатор
     if os.environ.get("AGENT_CLASSIFIER_URL"):
-        cfg.classifier.base_url = os.environ["AGENT_CLASSIFIER_URL"]
+        cfg.classifier.provider.base_url = os.environ["AGENT_CLASSIFIER_URL"]
     if os.environ.get("AGENT_CLASSIFIER_KEY"):
-        cfg.classifier.api_key = os.environ["AGENT_CLASSIFIER_KEY"]
+        cfg.classifier.provider.api_key = os.environ["AGENT_CLASSIFIER_KEY"]
     if os.environ.get("AGENT_CLASSIFIER_MODEL"):
-        cfg.classifier_model = os.environ["AGENT_CLASSIFIER_MODEL"]
+        cfg.classifier.model = os.environ["AGENT_CLASSIFIER_MODEL"]
     
     # Редактор
     if os.environ.get("AGENT_EDITOR_URL"):
