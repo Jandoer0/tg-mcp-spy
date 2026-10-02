@@ -60,7 +60,7 @@ export function buildPostEl(p, topicsForPost = []) {
   el.innerHTML = `<div class="posthead">${kindTag}${srcTag}${escapeHtml(p.date || "—")} · ${url}
         ${editorTag}
         <button class="addbtn" title="Добавить в тему">＋</button></div>
-      <div class="text">${renderBody(displayText)}</div>${tagsHtml}`;
+      <div class="text post-text">${renderMarkdown(displayText)}</div>${tagsHtml}`;
   el.querySelector(".addbtn").addEventListener("click", (e) => {
     e.stopPropagation();
     toggleAddMenu(el, p.id);
@@ -220,6 +220,18 @@ async function refreshPostEditor(el, postId) {
   }
 }
 
+function renderMarkdown(text) {
+  if (!text) return "";
+  // marked.parse превращает MD в HTML. 
+  // Используем try-catch на случай ошибок в библиотеке.
+  try {
+    return marked.parse(text);
+  } catch (e) {
+    console.error("Markdown parse error:", e);
+    return escapeHtml(text);
+  }
+}
+
 export function toggleEditorMenu(el, p) {
   if (editorMenuEl) {
     closeEditorMenu();
@@ -257,7 +269,7 @@ export function toggleEditorMenu(el, p) {
           if (done) {
             p.editor_active = 1;
             const textEl = el.querySelector(".text");
-            if (textEl) textEl.innerHTML = renderBody(p.text_edited);
+            if (textEl) textEl.innerHTML = renderMarkdown(p.text_edited);
             if (tag) tag.className = "editortag done lit";
             toast("Пост отредактирован ИИ");
           } else {
@@ -302,7 +314,7 @@ export function toggleEditorMenu(el, p) {
           await api(`/api/editor/post/active?post_id=${encodeURIComponent(postId)}&active=${active ? 1 : 0}`, { method: "POST" });
           p.editor_active = active ? 1 : 0;
           const textEl = el.querySelector(".text");
-          if (textEl) textEl.innerHTML = renderBody(active ? p.text_edited : p.text);
+          if (textEl) textEl.innerHTML = renderMarkdown(active ? p.text_edited : p.text);
           const tag = el.querySelector(".editortag");
           if (tag) tag.classList.toggle("lit", active);
           toast(active ? "Показана редакция ИИ" : "Показан оригинал");
@@ -323,7 +335,7 @@ export function toggleEditorMenu(el, p) {
           p.editor_status = "none";
           p.editor_active = 0;
           const textEl = el.querySelector(".text");
-          if (textEl) textEl.innerHTML = renderBody(p.text);
+          if (textEl) textEl.innerHTML = renderMarkdown(p.text);
           const tag = el.querySelector(".editortag");
           if (tag) tag.className = "editortag none";
           toast("ИИ-редакция удалена");

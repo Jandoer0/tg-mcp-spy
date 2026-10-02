@@ -169,7 +169,32 @@
     .post .srcname { color: var(--accent); font-weight: 600; }
     .post .text { white-space: pre-wrap; font-size: 15px; margin-top: 8px; overflow-wrap: anywhere;
       word-break: break-word; line-height: 1.7; }
+    .post-text blockquote {
+      margin: 0 0 0.5rem 0;
+      padding: 0 0 0 0.8rem;
+      border-left: 3px solid var(--accent);
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .post-text p {
+      margin-bottom: 0.5rem;
+    }
+    .post-text p:last-child {
+      margin-bottom: 0;
+    }
+    .post-text strong {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .post-text a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .post-text a:hover {
+      text-decoration: underline;
+    }
     .post .text img { max-width: 100%; height: auto; border-radius: 8px; }
+
     .post a { color: var(--accent); }
 
     .empty { color: var(--text-muted); font-size: 14px; padding: 16px; text-align: center;
