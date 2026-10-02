@@ -19,8 +19,13 @@ export function buildPostEl(p, topicsForPost = []) {
   const editorStatus = p.editor_status || "none";
   const editorActive = Number(p.editor_active || 0) === 1;
   const hasEdited = !!(p.text_edited && String(p.text_edited).trim());
+  
+  // Исправление: если пост отредактирован, но флаг active по какой-то причине 0,
+  // принудительно считаем его активным для отрисовки, чтобы не «забывать» редакцию.
+  const effectiveActive = hasEdited ? true : editorActive;
+  
   // Какой текст показываем: редакцию (если активна и есть), иначе оригинал.
-  const showEdited = editorActive && hasEdited;
+  const showEdited = effectiveActive && hasEdited;
   const displayText = showEdited ? p.text_edited : p.text;
   const editorState = editorStatus === "editing"
     ? "editing"
