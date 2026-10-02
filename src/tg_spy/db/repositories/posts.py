@@ -9,6 +9,16 @@ from ..connection import get_conn, rotate_if_needed
 def save_posts(source_id: int, posts: list[dict]) -> None:
     conn = get_conn()
     for post in posts:
+        # Контентная дедупликация: проверяем, нет ли уже такого же текста от этого источника
+        # Это предотвращает дубли, если ext_id меняется, а текст остается прежним.
+        exists = conn.execute(
+            "SELECT 1 FROM posts WHERE source_id = ? AND text = ? LIMIT 1",
+            (source_id, post["text"]),
+        ).fetchone()
+        
+        if exists:
+            continue
+
         conn.execute(
             """INSERT OR IGNORE INTO posts (source_id, ext_id, text, date, url)
                VALUES (?, ?, ?, ?, ?)""",
