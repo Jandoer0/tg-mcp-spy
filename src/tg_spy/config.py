@@ -181,20 +181,33 @@ DEFAULT_PROVIDERS = {
 
 
 def load_config() -> AppConfig:
-    """Собрать конфиг: дефолт + config.json + переменные окружения."""
+    """Собрать конфиг: дефолт -> config.json -> переменные окружения.
+    
+    Приоритет: ENV > config.json > Default.
+    """
+    # 1. Начинаем с дефолтов
     cfg = AppConfig()
+    
+    # 2. Накладываем config.json, если он есть
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             user = json.load(f)
         if isinstance(user, dict):
             user_cfg = AppConfig.from_legacy_dict(user)
+            # Обновляем поля cfg значениями из user_cfg
+            # Используем model_dump для обновления, чтобы сохранить структуру
+            cfg_data = cfg.model_dump()
+            user_data = user_cfg.model_dump()
+            
+            # Обновляем только те поля, которые были явно заданы в json
+            # (для простоты обновляем всё из user_cfg, так как from_legacy_dict уже применил дефолты)
             cfg = user_cfg
     except FileNotFoundError:
-        logger.info("config.json не найден, используется конфиг по умолчанию")
+        logger.info("config.json не найден, используются значения по умолчанию")
     except Exception as e:
         logger.warning("Не удалось прочитать config.json: %s", e)
 
-    # Переопределения через переменные окружения.
+    # 3. Переопределяем через переменные окружения (самый высокий приоритет)
     # Классификатор
     if os.environ.get("AGENT_CLASSIFIER_URL"):
         cfg.classifier.base_url = os.environ["AGENT_CLASSIFIER_URL"]
@@ -218,11 +231,13 @@ def load_config() -> AppConfig:
     env_enabled = os.environ.get("AGENT_SCHEDULE_ENABLED")
     if env_enabled is not None:
         sched.enabled = env_enabled.strip().lower() in ("1", "true", "yes", "on")
+    
     if os.environ.get("AGENT_FEED_REFRESH_MINUTES"):
         try:
             sched.feed_refresh_minutes = max(1, int(os.environ["AGENT_FEED_REFRESH_MINUTES"]))
         except ValueError:
             pass
+            
     if os.environ.get("AGENT_TOPIC_MINUTES"):
         try:
             sched.topic_minutes = max(1, int(os.environ["AGENT_TOPIC_MINUTES"]))
