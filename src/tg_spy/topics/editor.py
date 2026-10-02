@@ -61,6 +61,9 @@ def edit_one_post(post_id: int) -> dict:
             "error": "модель недоступна",
         }
     saved = set_post_edited(post_id, edited)
+    if saved:
+        from ..db import set_post_editor_active
+        set_post_editor_active(post_id, True)
     return {
         "post_id": post_id,
         "ok": bool(saved),
