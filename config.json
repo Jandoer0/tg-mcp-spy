@@ -28,7 +28,7 @@
   "timezone": "Asia/Novosibirsk",
   "systemPrompt": "Ты — строгий фильтр новостей. Твоя задача — решить, относится ли каждый пост из списка к заданной теме. Отвечай только JSON, без пояснений и аналитики.",
   "schedule": {
-    "enabled": true,
+    "enabled": false,
     "feedRefreshMinutes": 60,
     "topicMinutes": 1440
   },

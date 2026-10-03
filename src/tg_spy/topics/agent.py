@@ -54,7 +54,7 @@ def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] =
     base = (prov.base_url or "http://127.0.0.1:11434/v1").rstrip("/")
     url = f"{base}/chat/completions"
     if provider_name == "classifier":
-        model = model or cfg.classifier_model or "llama3.2"
+        model = model or cfg.classifier.model or "llama3.2"
     else:
         model = model or cfg.editor_model or "llama3.2"
     api_key = prov.api_key or "ollama"
@@ -385,7 +385,7 @@ def test_connection(provider_name: str = "classifier") -> dict:
     """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»)."""
     cfg = load_config()
     if provider_name == "classifier":
-        model = cfg.classifier_model or "llama3.2"
+        model = cfg.classifier.model or "llama3.2"
     else:
         model = cfg.editor_model or "llama3.2"
     try:

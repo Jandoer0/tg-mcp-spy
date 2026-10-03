@@ -35,10 +35,11 @@ def _tick() -> None:
     try:
         cfg = load_config()
         sched = cfg.schedule
-        if not sched.enabled:
-            return
         now = time.time()
 
+        # Обновление ленты — всегда по своему интервалу, независимо от
+        # переключателя «ИИ-классификатор» (это недорогой HTTP-опрос,
+        # а не вызов модели).
         feed_min = max(1, int(sched.feed_refresh_minutes))
         if now - _last_feed >= feed_min * 60:
             try:
@@ -48,6 +49,12 @@ def _tick() -> None:
                 logger.error("Ошибка авто-обновления ленты: %s", e)
             _last_feed = now
 
+        # ИИ-классификатор (локальная модель): запускается только когда
+        # включён переключатель schedule.enabled — чтобы не тратить ресурсы
+        # модели впустую. При выключенном переключателе лента продолжает
+        # обновляться, но модель не вызывается.
+        if not sched.enabled:
+            return
         topic_min = max(1, int(sched.topic_minutes))
         for t in list_topics():
             if not t.get("active"):
