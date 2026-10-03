@@ -227,22 +227,36 @@ async function fetchModels(notify = true, desiredModel = null) {
       body: JSON.stringify({ baseUrl, apiKey }),
     });
     if (r.ok && Array.isArray(r.models) && r.models.length) {
+      // Модель из конфига/переменной окружения всегда оставляем в списке,
+      // даже если провайдер её сейчас не отдаёт (например, не загружена в Ollama).
+      const list = desiredModel && !r.models.includes(desiredModel)
+        ? [desiredModel, ...r.models]
+        : r.models;
       sel.innerHTML =
         '<option value="">— выберите модель —</option>' +
-        r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      // Восстанавливаем выбранную модель: приоритет у модели из конфига,
-      // иначе у той, что была выбрана до обновления списка.
+        list.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
       const target = desiredModel || prev;
-      if (target && r.models.includes(target)) sel.value = target;
+      if (target && list.includes(target)) sel.value = target;
       if (notify) {
-        st.textContent = `Найдено моделей: ${r.models.length}. Выберите из списка.`;
+        st.textContent = `Найдено моделей: ${r.models.length}. Текущая: ${sel.value || "—"}.`;
         toast("Список моделей обновлён");
       }
     } else {
-      sel.innerHTML = '<option value="">модели не найдены</option>';
-      if (notify) st.textContent = "Модели не найдены: " + (r.error || "пусто");
+      // Провайдер не вернул модели — сохраняем текущую (env) модель видимой.
+      if (desiredModel) {
+        sel.innerHTML = `<option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
+        sel.value = desiredModel;
+      } else {
+        sel.innerHTML = '<option value="">модели не найдены</option>';
+      }
+      if (notify) st.textContent = "Модели не найдены: " + (r.error || "пусто") + (desiredModel ? ` (используется ${desiredModel})` : "");
     }
   } catch (e) {
+    // Ошибка сети/провайдера — не теряем текущую (env) модель, оставляем её видимой.
+    if (desiredModel && sel) {
+      sel.innerHTML = `<option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
+      sel.value = desiredModel;
+    }
     if (notify) st.textContent = "Ошибка: " + e.message;
     else console.warn("Автоподгрузка моделей не удалась:", e);
   }
