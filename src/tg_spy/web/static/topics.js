@@ -278,19 +278,27 @@ async function populateEditorModels(notify = true, desiredModel = null) {
     });
     if (r.ok && Array.isArray(r.models) && r.models.length) {
       const cur = sel.value;
+      // Модель из конфига/переменной окружения всегда оставляем в списке.
+      const list = desiredModel && !r.models.includes(desiredModel)
+        ? [desiredModel, ...r.models]
+        : r.models;
       sel.innerHTML =
         '<option value="">— как у провайдера (общая модель) —</option>' +
-        r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      // Восстанавливаем выбранную модель: приоритет у модели из конфига,
-      // иначе у той, что была выбрана до обновления списка.
+        list.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
       const target = desiredModel || cur;
-      if (target && r.models.includes(target)) sel.value = target;
+      if (target && list.includes(target)) sel.value = target;
       if (notify && status) {
         status.className = "config-status ok";
-        status.textContent = `Моделей: ${r.models.length}.`;
+        status.textContent = `Моделей: ${r.models.length}. Текущая: ${sel.value || "—"}.`;
       }
     } else {
-      sel.innerHTML = '<option value="">модели не найдены</option>';
+      // Провайдер не вернул модели — сохраняем текущую (env) модель видимой.
+      if (desiredModel) {
+        sel.innerHTML = `<option value="">— как у провайдера (общая модель) —</option><option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
+        sel.value = desiredModel;
+      } else {
+        sel.innerHTML = '<option value="">модели не найдены</option>';
+      }
       if (notify && status) {
         status.className = "config-status err";
         status.textContent = "Модели не найдены: " + (r.error || "пусто");
