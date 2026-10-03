@@ -9,7 +9,7 @@ export function toast(msg, isErr = false) {
   el.textContent = msg;
   el.className = "toast show" + (isErr ? " err" : "");
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => (el.className = "toast"), 2600);
+  _toastTimer = setTimeout(() => (el.className = "toast"), 3000);
 }
 
 export async function api(path, opts) {

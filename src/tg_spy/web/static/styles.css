@@ -219,12 +219,15 @@
     .empty { color: var(--text-muted); font-size: 14px; padding: 16px; text-align: center;
       border: 1px dashed var(--border); border-radius: 11px; }
 
-    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-      background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 11px 18px;
-      border-radius: 12px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
-      font-size: 14px; max-width: 90vw; box-shadow: var(--shadow); }
-    .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
-    .toast.err { border-color: var(--danger); color: var(--danger); }
+    .toast { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(20px);
+      background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 12px 20px;
+      border-radius: 16px; opacity: 0; pointer-events: none; transition: opacity .3s cubic-bezier(.4,0,.2,1), 
+      transform .3s cubic-bezier(.4,0,.2,1);
+      font-size: 14px; max-width: 90vw; box-shadow: var(--shadow); z-index: 1000;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      text-align: center; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.err { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
 
     /* ----- «Мои темы» (третья вкладка) ----- */
     .topics { display: grid; gap: 10px; }
