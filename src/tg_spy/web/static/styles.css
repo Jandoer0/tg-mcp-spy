@@ -406,6 +406,7 @@
       cursor: pointer;
       transition: background 0.2s, border-color 0.2s;
       padding: 0 3px;
+      box-sizing: border-box;
     }
     .ai-toggle .toggle-thumb {
       width: 16px;
