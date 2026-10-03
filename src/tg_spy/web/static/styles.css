@@ -382,51 +382,22 @@
     }
 
     /* Переключатель ИИ-классификатора в заголовке ленты */
-    .ai-toggle {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      margin-left: 8px;
-      vertical-align: middle;
-    }
-    .ai-toggle input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-      position: absolute;
-    }
-    .ai-toggle .toggle-track {
-      display: flex;
-      align-items: center;
-      width: 40px;
-      height: 22px;
-      background: var(--surface-2);
-      border: 1px solid var(--border-strong);
-      border-radius: 999px;
-      cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
-      padding: 0 3px;
-      box-sizing: border-box;
-    }
-    .ai-toggle .toggle-thumb {
-      width: 16px;
-      height: 16px;
-      background: var(--text-muted);
-      border-radius: 50%;
-      transition: transform 0.2s, background 0.2s;
-      font-size: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-      flex-shrink: 0;
-    }
+    .ai-toggle { position: relative; display: inline-block; width: 46px; height: 26px;
+      margin-left: 12px; vertical-align: middle; flex-shrink: 0; }
+    .ai-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .ai-toggle .toggle-track { position: absolute; inset: 0; background: var(--surface-2);
+      border: 1.5px solid var(--border-strong); border-radius: 999px; cursor: pointer;
+      overflow: hidden; transition: background .25s ease, border-color .25s ease; }
+    .ai-toggle .toggle-thumb { position: absolute; top: 50%; left: 3px; width: 20px; height: 20px;
+      transform: translateY(-50%); display: flex;
+      align-items: center; justify-content: center;
+      border-radius: 999px; background: var(--thumb-bg); color: var(--text-inverse);
+      font-size: 12px; line-height: 1; transition: left .3s cubic-bezier(.4,0,.2,1),
+        background .25s ease, color .25s ease; }
     .ai-toggle input:checked + .toggle-track {
-      background: color-mix(in srgb, var(--accent) 20%, transparent);
+      background: color-mix(in srgb, var(--accent) 20%, var(--surface-2));
       border-color: var(--accent);
     }
     .ai-toggle input:checked + .toggle-track .toggle-thumb {
-      transform: translateX(18px);
-      background: var(--accent);
-      color: #fff;
+      left: 22px; background: var(--accent); color: #fff;
     }
