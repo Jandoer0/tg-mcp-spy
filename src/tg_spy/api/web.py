@@ -462,7 +462,8 @@ async def api_config_models(request: Request) -> JSONResponse:
     if not base_url:
         cfg = load_config()
         # По умолчанию берем провайдера классификатора
-        prov = cfg.classifier
+        # (у ClassifierConfig провайдер вложен в .provider)
+        prov = cfg.classifier.provider
         base_url = prov.base_url or ""
         api_key = api_key or (prov.api_key or "")
     try:

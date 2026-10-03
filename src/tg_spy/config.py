@@ -288,7 +288,9 @@ def get_provider(cfg: AppConfig | None = None, provider_name: str | None = None)
     cfg = cfg or load_config()
     if provider_name == "editor":
         return cfg.editor
-    return cfg.classifier
+    # У классификатора провайдер вложен в cfg.classifier.provider
+    # (cfg.classifier — это ClassifierConfig, а не ProviderConfig).
+    return cfg.classifier.provider
 
 
 def get_config_path() -> str:
