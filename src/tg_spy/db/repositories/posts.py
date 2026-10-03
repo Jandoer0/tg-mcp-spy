@@ -39,7 +39,7 @@ def get_oldest_post_date(source_id: int) -> Optional[str]:
 
 
 def get_posts(source_ids: list[int], since_date: str, limit: int = 50, offset: int = 0) -> list[dict]:
-    """Посты подписок с даты ``since_date`` (не учитывая source_ids).
+    """Посты подписок (только из ``source_ids``) с даты ``since_date``.
 
     Поддерживает пагинацию (limit/offset) для бесконечной прокрутки ленты.
     """

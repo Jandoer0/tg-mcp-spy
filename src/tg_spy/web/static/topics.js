@@ -533,7 +533,24 @@ export function initTopics() {
             schedule: { enabled }
           }),
         });
-        toast(enabled ? "ИИ-классификатор включен" : "ИИ-классификатор выключен");
+        if (enabled) {
+          // Включили классификатор — сразу подтянуть свежие посты и
+          // запустить ИИ-агента по всем активным темам, чтобы модель
+          // не простаивала (иначе первый прогон только по расписанию).
+          try {
+            await api("/api/refresh/posts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ days: 1 }),
+            });
+          } catch (_e) { /* обновление ленты не критично */ }
+          try {
+            await api("/api/topics/run-all", { method: "POST" });
+          } catch (_e) { /* агент запустится по расписанию */ }
+          toast("ИИ-классификатор включён — модель запущена");
+        } else {
+          toast("ИИ-классификатор выключен");
+        }
       } catch (e) {
         toast(e.message, true);
         classifierToggle.checked = !enabled; // откат при ошибке

@@ -31,7 +31,7 @@ from ..ingest import rss
 from ..ingest.refresh import refresh_all_sources
 from ..topics import agent, service
 from ..topics import editor as editor_svc
-from ..config import get_provider, load_config
+from ..config import load_config
 
 WEB_DIR = Path(__file__).parent.parent / "web" / "static"
 
@@ -118,10 +118,6 @@ def _post_json(p: dict) -> dict:
         "source": p.get("source", ""),
         "kind": p.get("kind", ""),
     }
-    # Лог для отладки конкретного проблемного поста
-    if res["id"] == 210653:
-        import logging
-        logging.getLogger(__name__).info(f"DEBUG POST 210653: edited={bool(res['text_edited'])}, active={res['editor_active']}")
     return res
 
 

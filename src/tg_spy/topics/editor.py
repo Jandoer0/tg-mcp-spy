@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import threading
 from typing import Optional
 
@@ -70,13 +69,6 @@ def edit_one_post(post_id: int) -> dict:
         "edited_len": len(edited),
         "changed": edited.strip() != original,
     }
-
-
-def _get_editor_provider(cfg):
-    """Получить провайдер для ИИ-редактора из конфига."""
-    from ..config import get_provider
-    return get_provider(cfg, provider_name=cfg.editor_provider)
-
 
 
 

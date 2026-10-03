@@ -130,14 +130,6 @@ def list_sources_topics():
     from ..db import list_topics
 
     return list_topics()
-    """Запустить локального ИИ-агента для темы сейчас."""
-    res = service.run_agent(name, max_batches=5)
-    if res.get("error"):
-        return f"Тема «{name}»: {res['error']}"
-    return (
-        f"Тема «{name}»: просканировано {res.get('scanned', 0)}, "
-        f"добавлено {res.get('added', 0)}, всего {res.get('total', 0)}"
-    )
 
 
 @mcp.tool()
