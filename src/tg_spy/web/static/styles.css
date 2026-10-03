@@ -164,7 +164,7 @@
 
     .sources { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
     .src { display: flex;
-      align-items: center; flex-direction: column; gap: 6px; border: 1px solid var(--border);
+      flex-direction: column; gap: 6px; border: 1px solid var(--border);
       border-radius: 13px; padding: 13px 15px; min-width: 0; overflow: hidden;
       background: var(--surface-2); transition: .15s; }
     .src:hover { border-color: var(--border-strong); }
@@ -245,7 +245,7 @@
     /* ----- «Мои темы» (третья вкладка) ----- */
     .topics { display: grid; gap: 10px; }
     .topic { display: flex;
-      align-items: center; flex-direction: column; gap: 8px; border: 1px solid var(--border);
+      flex-direction: column; gap: 8px; border: 1px solid var(--border);
       border-radius: 13px; padding: 13px 15px; background: var(--surface-2); transition: .15s; }
     .topic:hover { border-color: var(--border-strong); }
     .topic .t-top { display: flex;
@@ -322,14 +322,14 @@
 
     /* Настройки провайдера ИИ — аккуратный столбик */
     .provider-form { display: flex;
-      align-items: center; flex-direction: column; gap: 14px; margin-top: 6px; }
+      flex-direction: column; gap: 14px; margin-top: 6px; }
     .provider-form .field { display: flex;
-      align-items: center; flex-direction: column; gap: 6px; }
+      flex-direction: column; gap: 6px; }
     .provider-form .field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
     .provider-form input { background: var(--input-bg); color: var(--text);
       border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px;
-      flex: 0 0 auto; max-width: 520px; }
-    .provider-form select { max-width: 520px; }
+      flex: 0 0 auto; width: 100%; }
+    .provider-form select { width: 100%; }
     .provider-form input:focus { outline: none; border-color: var(--accent); }
     .provider-form .ghost.small { align-self: flex-start; padding: 6px 12px; font-size: 12px; }
     .provider-form .checks { display: flex;
