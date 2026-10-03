@@ -101,10 +101,10 @@
       left: 31px; background: #2b3340; color: var(--text-inverse);
     }
 
-    /* Переключатель ИИ-классификатора в шапке ленты */
+    /* Переключатель ИИ-классификатора в заголовке ленты */
     .ai-toggle { position: relative; display: inline-block; width: 46px; height: 26px;
       margin-left: 12px; vertical-align: middle; flex-shrink: 0; }
-    .ai-toggle input { opacity: 0.01; width: 100%; height: 100%; position: absolute;
+    .ai-toggle input { opacity: 0; width: 100%; height: 100%; position: absolute;
       inset: 0; cursor: pointer; z-index: 10; margin: 0; }
     .ai-toggle .toggle-track { position: absolute; inset: 0; background: var(--surface-2);
       border: 1.5px solid var(--border-strong); border-radius: 999px; cursor: pointer;
@@ -122,10 +122,8 @@
       border-color: var(--accent);
     }
     .ai-toggle input:checked + .toggle-track .toggle-thumb {
-      left: 22px; background: var(--accent); color: #fff;
+      left: 22px !important; background: var(--accent); color: #fff;
     }
-
-    main { max-width: 860px; margin: 22px auto; padding: 0 16px 48px; display: grid; gap: 16px; }
     .hidden { display: none !important; }
 
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
