@@ -110,7 +110,16 @@ def run_editor_batch(days: Optional[int] = None, limit: Optional[int] = None) ->
     edited = 0
     skipped = 0
     errors = 0
-    for p in rows:
+    # Кооперативная остановка: если ИИ-редактор выключен в конфиге — прерываем
+    # пакет, чтобы не грузить модель вхолостую. Перечитываем конфиг каждые
+    # несколько постов (дешевле, чем на каждом), но достаточно оперативно.
+    _cfg = load_config()
+    for i, p in enumerate(rows):
+        if i % 5 == 0:
+            _cfg = load_config()
+        if not _cfg.schedule.editor_enabled:
+            logger.info("ИИ-редактор выключен — прерывание пакетной обработки")
+            break
         pid = p["id"]
         # Пропускаем уже обработанные (повторный прогон не переписывает).
         if (p.get("editor_status") or "none") == "done":

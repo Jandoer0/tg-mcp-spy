@@ -47,21 +47,29 @@
   <main>
     <!-- Вкладка 1: последние посты (главная) -->
     <section id="tab-posts" class="tab-panel">
-      <div class="card">
-        <h2>Лента новостей <span id="posts-source-label" class="hint" style="margin:0;font-weight:400;"></span> <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты">Обновить ленту</button>
-          <label class="ai-toggle" title="Включить ИИ-классификатор">
-            <input type="checkbox" id="classifier-toggle">
-            <span class="toggle-track">
-              <span class="toggle-thumb">🤖</span>
-            </span>
-          </label>
-          <label class="ai-toggle" title="Включить ИИ-редактор (обрабатывает посты от самых свежих)">
-            <input type="checkbox" id="editor-toggle">
-            <span class="toggle-track">
-              <span class="toggle-thumb">✍️</span>
-            </span>
-          </label>
-        </h2>
+      <!-- Липкая шапка ленты: фильтры, обновление и переключатели ИИ.
+           Не скрывается при скролле к поздним постам. -->
+      <div class="feed-head">
+        <div class="feed-head-row">
+          <h2>Лента новостей <span id="posts-source-label" class="hint"></span></h2>
+          <div class="feed-tools">
+            <div class="ai-switch" title="ИИ-классификатор: авто-отбор постов в темы по тегам">
+              <label class="ai-toggle">
+                <input type="checkbox" id="classifier-toggle">
+                <span class="toggle-track"><span class="toggle-thumb">🤖</span></span>
+              </label>
+              <span class="ai-switch-label">ИИ классификатор</span>
+            </div>
+            <div class="ai-switch" title="ИИ-редактор: нормализация текста постов">
+              <label class="ai-toggle">
+                <input type="checkbox" id="editor-toggle">
+                <span class="toggle-track"><span class="toggle-thumb">✍️</span></span>
+              </label>
+              <span class="ai-switch-label">ИИ редактор</span>
+            </div>
+            <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты">Обновить ленту</button>
+          </div>
+        </div>
         <div class="feed-filters">
           <button class="chip active" data-kind="">Все</button>
           <button class="chip" data-kind="telegram">Telegram</button>
@@ -75,6 +83,8 @@
           </div>
           <button class="chip" id="chip-clear-source" data-kind="__clear_source" style="display:none;">✕ Сбросить фильтр</button>
         </div>
+      </div>
+      <div class="card feed-card">
         <div id="posts" class="posts">Загрузка…</div>
       </div>
     </section>
@@ -173,7 +183,8 @@
         <p class="hint">Привести текст карточек постов к единому стилю и вычистить мусор:
           рекламу и призывы подписаться, повторяющиеся «хвосты»-подписи, декоративные
           эмодзи, лишние пробелы и пустые строки. Фактура (имена, числа, цитаты)
-          сохраняется. Обработка идёт локальной моделью в фоне.</p>
+          сохраняется. Включается переключателем «ИИ редактор» в шапке ленты; обработка
+          идёт локальной моделью в фоне, начиная с самых свежих постов.</p>
         <form id="form-editor" class="provider-form">
           <label class="field">
             <span class="field-label">Адрес провайдера (API URL)</span>
@@ -187,20 +198,9 @@
             <span class="field-label">Модель</span>
             <select name="editorModel" id="editor-model"><option value="">— как у провайдера (общая модель) —</option></select>
           </label>
-          <label class="field">
-            <span class="field-label">Охват обработки</span>
-            <select name="scope" id="editor-scope">
-              <option value="1">За последний 1 день</option>
-              <option value="3">За последние 3 дня</option>
-              <option value="7" selected>За последние 7 дней</option>
-              <option value="30">За последние 30 дней</option>
-              <option value="0">Все посты</option>
-            </select>
-          </label>
           <div class="provider-actions">
             <button type="button" id="editor-save">Сохранить</button>
             <button type="button" id="editor-test" class="ghost">Проверить соединение</button>
-            <button type="button" id="editor-run" class="ghost">Запустить редактора</button>
           </div>
         </form>
         <p class="config-status" id="editor-status"></p>

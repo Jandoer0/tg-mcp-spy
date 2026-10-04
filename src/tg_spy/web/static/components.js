@@ -20,12 +20,9 @@ export function buildPostEl(p, topicsForPost = []) {
   const editorActive = Number(p.editor_active || 0) === 1;
   const hasEdited = !!(p.text_edited && String(p.text_edited).trim());
   
-  // Исправление: если пост отредактирован, но флаг active по какой-то причине 0,
-  // принудительно считаем его активным для отрисовки, чтобы не «забывать» редакцию.
-  const effectiveActive = hasEdited ? true : editorActive;
-  
   // Какой текст показываем: редакцию (если активна и есть), иначе оригинал.
-  const showEdited = effectiveActive && hasEdited;
+  // Флаг active — авторитетен и для живого опроса ленты (поллинг читает его из БД).
+  const showEdited = editorActive && hasEdited;
   const displayText = showEdited ? p.text_edited : p.text;
   const editorState = editorStatus === "editing"
     ? "editing"
@@ -69,6 +66,16 @@ export function buildPostEl(p, topicsForPost = []) {
     e.stopPropagation();
     toggleEditorMenu(el, p);
   });
+  // Оригинальный текст поста — чтобы при отключении редакции вернуть его.
+  el._origText = p.text;
+  // Начальное состояние ИИ-редактора — чтобы живой опрос не «мигал» эффектом
+  // на постах, уже отредактированных к моменту загрузки ленты.
+  el._edState = {
+    status: editorStatus,
+    has_edited: hasEdited,
+    active: editorActive,
+    lit: showEdited,
+  };
   return el;
 }
 
@@ -375,4 +382,68 @@ export function toggleEditorMenu(el, p) {
   menu.style.left = left + "px";
   menu.style.top = top + "px";
   setTimeout(() => document.addEventListener("click", _outsideEditor, true), 0);
+}
+
+
+// Обновить теги-чипы тем на карточке поста. Возвращает массив вновь
+// добавленных DOM-элементов чипов (для спец-эффекта). animate=false на
+// первичной отрисовке (без анимации), true — при живом опросе ленты.
+export function applyPostTags(el, tags, animate) {
+  const prev = el._tagSet || new Set();
+  const newSet = new Set(tags.map((t) => t.tag));
+  el._tagSet = newSet;
+  const fresh = [];
+  if (!tags.length) {
+    const box = el.querySelector(".post-tags");
+    if (box) box.remove();
+    return fresh;
+  }
+  let box = el.querySelector(".post-tags");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "post-tags";
+    el.appendChild(box);
+  }
+  // Удаляем чипы, которых больше нет.
+  box.querySelectorAll(".usertag").forEach((sp) => {
+    if (!newSet.has(sp.textContent)) sp.remove();
+  });
+  // Добавляем новые.
+  for (const t of tags) {
+    const exists = [...box.querySelectorAll(".usertag")].some((sp) => sp.textContent === t.tag);
+    if (exists) continue;
+    const span = document.createElement("span");
+    span.className = "usertag";
+    span.title = `тема: ${t.name}`;
+    span.textContent = t.tag;
+    box.appendChild(span);
+    if (!prev.has(t.tag)) fresh.push(span);
+  }
+  return fresh;
+}
+
+// Обновить индикатор ИИ-редактора на карточке по данным /api/posts/editor.
+// Возвращает true, если пост только что перешёл в состояние «отредактировано +
+// показывается редакция» (для спец-эффекта на кнопке).
+export function applyPostEditorState(el, postId, st) {
+  const tag = el.querySelector(".editortag");
+  const editing = st.status === "editing";
+  const lit = st.has_edited && Number(st.active || 0) === 1;
+  if (tag) {
+    tag.className = `editortag ${editing ? "editing" : st.has_edited ? "done" : "none"}${lit ? " lit" : ""}`;
+  }
+  const prevLit = (el._edState && el._edState.lit) || false;
+  el._edState = {
+    status: st.status,
+    has_edited: !!st.has_edited,
+    active: Number(st.active || 0) === 1,
+    lit,
+  };
+  const textEl = el.querySelector(".text");
+  if (lit) {
+    if (textEl && st.text_edited) textEl.innerHTML = renderMarkdown(st.text_edited);
+  } else if (textEl && el._origText != null) {
+    textEl.innerHTML = renderMarkdown(el._origText);
+  }
+  return !prevLit && lit;
 }

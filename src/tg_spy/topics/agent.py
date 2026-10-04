@@ -218,6 +218,15 @@ def run_topic_agent(
     batches = 0
 
     while batches < max_batches:
+        # Кооперативная остановка: если ИИ-классификатор выключен в конфиге —
+        # прерываем прогон, чтобы модель не работала вхолостую (выключение
+        # переключателя в интерфейсе должно сразу останавливать модель).
+        if not load_config().schedule.enabled:
+            logger.info(
+                "ИИ-классификатор выключен — прерывание прогона агента по теме %s",
+                topic.get("name"),
+            )
+            break
         candidates = get_posts_after(last_post_id, AGENT_BATCH)
         if not candidates:
             break

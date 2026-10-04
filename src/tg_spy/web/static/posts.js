@@ -4,7 +4,7 @@
 
 import { $, api, escapeHtml, toast } from "./core.js";
 import { state } from "./state.js";
-import { buildPostEl } from "./components.js";
+import { buildPostEl, applyPostTags, applyPostEditorState } from "./components.js";
 
 // Таймер дебаунса сохранения позиции скролла ленты в sessionStorage.
 let _scrollSaveT = null;
@@ -109,23 +109,60 @@ async function decoratePostTags(box, posts) {
       if (!tags || !tags.length) continue;
       const el = box.querySelector(`.post[data-id="${p.id}"]`);
       if (!el) continue;
-      const tagsHtml = tags
-        .map(
-          (t) =>
-            `<span class="usertag" title="тема: ${escapeHtml(t.name)}">${escapeHtml(t.tag)}</span>`
-        )
-        .join("");
-      const existing = el.querySelector(".post-tags");
-      if (existing) {
-        existing.outerHTML = `<div class="post-tags">${tagsHtml}</div>`;
-      } else {
-        el.insertAdjacentHTML("beforeend", `<div class="post-tags">${tagsHtml}</div>`);
-      }
+      applyPostTags(el, tags, false);
     }
   } catch (_e) {
     /* теги некритичны — пропускаем */
   }
 }
+
+// Опросить состояние ИИ-редактора и теги классификатора для видимых постов и
+// обновить карточки на месте — без перезагрузки ленты. При появлении
+// отредактированной версии или нового тега запускаем небольшой спец-эффект.
+export async function refreshVisiblePosts() {
+  const box = $("#posts");
+  if (!box) return;
+  const vh = window.innerHeight;
+  const els = [...box.querySelectorAll(".post")].filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > 0 && r.top < vh;
+  });
+  if (!els.length) return;
+  const ids = els.map((el) => el.dataset.id).filter((id) => id != null);
+  if (!ids.length) return;
+  try {
+    const ed = await api("/api/posts/editor?ids=" + ids.join(","));
+    for (const el of els) {
+      const st = ed[el.dataset.id];
+      if (!st) continue;
+      const justEdited = applyPostEditorState(el, el.dataset.id, st);
+      if (justEdited) {
+        const tag = el.querySelector(".editortag");
+        if (tag) flashFx(tag, "fx-edit");
+      }
+    }
+  } catch (_e) {}
+  try {
+    const tg = await api("/api/posts/tags?ids=" + ids.join(","));
+    for (const el of els) {
+      const tags = tg[el.dataset.id] || [];
+      state.postTags[el.dataset.id] = tags;
+      const freshChips = applyPostTags(el, tags, true);
+      for (const c of freshChips) flashFx(c, "fx-tag");
+    }
+  } catch (_e) {}
+}
+
+const _fxTimers = new WeakMap();
+function flashFx(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth; // перезапуск CSS-анимации
+  el.classList.add(cls);
+  clearTimeout(_fxTimers.get(el));
+  _fxTimers.set(el, setTimeout(() => el.classList.remove(cls), 2200));
+}
+
+let _postsPollStarted = false;
 
 // Добавить свежие посты (последние сутки) строго сверху, не перерисовывая уже загруженные.
 export async function prependFresh() {
@@ -312,4 +349,13 @@ export function initPosts() {
     }, 400);
   });
 
+  // Живой опрос карточек видимых постов (редакция ИИ / теги классификатора),
+  // пока открыта вкладка «Лента новостей».
+  if (!_postsPollStarted) {
+    _postsPollStarted = true;
+    setInterval(() => {
+      const tab = document.getElementById("tab-posts");
+      if (tab && !tab.classList.contains("hidden")) refreshVisiblePosts();
+    }, 3000);
+  }
 }

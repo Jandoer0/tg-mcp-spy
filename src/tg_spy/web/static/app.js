@@ -21,6 +21,17 @@ function boot() {
   // Подтянуть настройки ИИ/часового пояса из конфига сразу, независимо от
   // того, когда пользователь откроет вкладку «Настройки»/«Мои темы».
   loadConfig();
+
+  // Подстроить высоту липкой шапки ленты под фактическую высоту верхнего
+  // header-bar (зависит от темы/ширины), чтобы шапка ленты не перекрывалась.
+  const headerBar = document.querySelector(".header-bar");
+  const setHeaderH = () => {
+    if (headerBar) {
+      document.documentElement.style.setProperty("--header-h", headerBar.offsetHeight + "px");
+    }
+  };
+  setHeaderH();
+  window.addEventListener("resize", setHeaderH);
 }
 
 if (document.readyState === "loading") {

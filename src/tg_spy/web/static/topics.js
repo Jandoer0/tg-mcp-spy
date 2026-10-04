@@ -587,7 +587,7 @@ export function initTopics() {
             await api("/api/editor/run", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ days: 1 }),
+              body: JSON.stringify({}),
             });
           } catch (_e) { /* редактор запустится по расписанию */ }
           toast("ИИ-редактор включён — обработка постов запущена");
@@ -677,39 +677,6 @@ export function initEditorCard() {
     });
   }
 
-  // Кнопка запуска редактора
-  const runBtn = document.getElementById("editor-run");
-  if (runBtn) {
-    runBtn.addEventListener("click", async () => {
-      const scope = parseInt(form.querySelector("[name=scope]").value, 10) || 0;
-      
-      // Сохраняем конфигурацию перед запуском
-      await saveEditorConfig();
-
-      if (status) {
-        status.className = "config-status";
-        status.textContent = "ИИ-редактор запущен, обработка в фоне…";
-      }
-      try {
-        const r = await api("/api/editor/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ days: scope }),
-        });
-        toast(r.message || "ИИ-редактор запущен");
-        if (status) {
-          status.className = "config-status ok";
-          status.textContent = "Запущено. Готово — обновите ленту новостей, чтобы увидеть результат.";
-        }
-      } catch (err) {
-        toast(err.message, true);
-        if (status) {
-          status.className = "config-status err";
-          status.textContent = "Ошибка: " + err.message;
-        }
-      }
-    });
-  }
 }
 
 // Сохранение конфигурации ИИ-редактора в localStorage
