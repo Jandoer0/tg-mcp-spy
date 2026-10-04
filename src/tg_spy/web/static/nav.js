@@ -2,7 +2,7 @@
 
 import { $ } from "./core.js";
 import { loadPosts, populateTagFilter } from "./posts.js";
-import { loadConfig, loadTopics, loadAllTopics, startTopicsPolling, stopTopicsPolling, initEditorCard } from "./topics.js";
+import { loadConfig, loadTopics, loadAllTopics, startTopicsPolling, stopTopicsPolling, initProviderCards } from "./topics.js";
 
 export function switchTab(tab) {
   document.querySelectorAll(".tab").forEach((t) =>
@@ -24,7 +24,7 @@ export function switchTab(tab) {
   }
   if (tab === "settings") {
     loadConfig();
-    initEditorCard();
+    initProviderCards();
   }
 }
 

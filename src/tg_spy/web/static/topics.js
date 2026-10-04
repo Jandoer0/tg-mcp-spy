@@ -1,4 +1,4 @@
-// Вкладка «Мои темы»: список тем, запуск агента, настройки провайдера.
+// Вкладка «Мои темы»: список тем, запуск агента, настройки провайдеров ИИ.
 // Кнопка «открыть в ленте» перенаправляет во вкладку «Лента новостей»
 // с включённым фильтром по тегу темы (детальное окно темы убрано).
 
@@ -113,62 +113,225 @@ export async function openTopicInLenta(tag) {
   switchTab("posts"); // populateTagFilter + loadPosts учтут выбранный тег
 }
 
-// ----- Настройки провайдера / модели ИИ -----
-export async function loadConfig() {
-  const card = document.getElementById("classifier-card");
-  if (!card) {
-    console.error("Элемент classifier-card не найден в DOM");
+// ----- Настройки провайдеров ИИ (единая логика для обеих ролей) -----
+//
+// У «ИИ классификатора» и «ИИ редактора» СВОИ конфигурации провайдеров
+// (можно держать классификатор на локальной модели, а редактор — у
+// облачного провайдера), но логика работы и оповещения одинаковые:
+// сохранение, проверка соединения и загрузка списка моделей идут через
+// одни и те же функции ниже — роль меняет только набор настроек.
+
+const ROLES = {
+  classifier: {
+    cardId: "classifier-card",
+    formId: "form-provider",
+    baseUrlSel: "[name=baseUrl]",
+    apiKeySel: "[name=apiKey]",
+    modelId: "cfg-model",
+    promptSel: "[name=systemPrompt]",
+    promptKey: "systemPrompt",
+    statusId: "config-status",
+    testBtnId: "config-test",
+  },
+  editor: {
+    cardId: "editor-card",
+    formId: "form-editor",
+    baseUrlSel: "#editor-baseUrl",
+    apiKeySel: "#editor-apiKey",
+    modelId: "editor-model",
+    promptSel: "[name=editorSystemPrompt]",
+    promptKey: "editorSystemPrompt",
+    statusId: "editor-status",
+    testBtnId: "editor-test",
+  },
+};
+
+// Элементы карточки роли (одинаковый набор полей у обеих ролей).
+function roleEls(role) {
+  const r = ROLES[role];
+  const card = document.getElementById(r.cardId);
+  if (!card) return null;
+  return {
+    card,
+    form: document.getElementById(r.formId),
+    baseUrl: card.querySelector(r.baseUrlSel),
+    apiKey: card.querySelector(r.apiKeySel),
+    model: document.getElementById(r.modelId),
+    prompt: card.querySelector(r.promptSel),
+    status: document.getElementById(r.statusId),
+  };
+}
+
+// Тело POST /api/config для одной роли (провайдер + модель + промпт).
+function rolePayload(role) {
+  const els = roleEls(role);
+  const r = ROLES[role];
+  return {
+    [role]: {
+      provider: {
+        baseUrl: els.baseUrl ? els.baseUrl.value.trim() : "",
+        apiKey: els.apiKey ? els.apiKey.value.trim() || "ollama" : "ollama",
+      },
+      model: els.model ? els.model.value.trim() : "",
+    },
+    [r.promptKey]: els.prompt ? els.prompt.value : "",
+  };
+}
+
+// Статус в карточке роли — одинаковые классы и тексты для обеих ролей.
+function setRoleStatus(role, text, ok = null) {
+  const els = roleEls(role);
+  if (!els || !els.status) return;
+  els.status.className =
+    "config-status" + (ok === true ? " ok" : ok === false ? " err" : "");
+  els.status.textContent = text;
+}
+
+// Сохранить настройки роли на сервер (одинаковые оповещения для обеих).
+async function saveRoleConfig(role) {
+  try {
+    await api("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rolePayload(role)),
+    });
+    setRoleStatus(role, "Сохранено. Применяется сразу.", true);
+    toast("Настройки ИИ сохранены");
+  } catch (e) {
+    setRoleStatus(role, "Ошибка: " + e.message, false);
+    toast(e.message, true);
+  }
+}
+
+// «Проверить соединение» — проверяет значения из формы роли до сохранения
+// (baseUrl/apiKey передаются в теле; бэкенд использует настройки роли).
+async function testRoleConnection(role) {
+  const els = roleEls(role);
+  if (!els) return;
+  const baseUrl = els.baseUrl ? els.baseUrl.value.trim() : "";
+  if (!baseUrl) {
+    setRoleStatus(role, "Сначала укажите адрес провайдера (API URL).", false);
     return;
   }
+  const apiKey = els.apiKey ? els.apiKey.value.trim() : "";
+  setRoleStatus(role, "Проверка связи…");
+  try {
+    const r = await api("/api/config/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: role, baseUrl, apiKey }),
+    });
+    if (r.ok) {
+      setRoleStatus(role, r.message || `Связь установлена. Модель ${r.model || ""} активна.`, true);
+      toast("Связь с моделью установлена");
+    } else {
+      setRoleStatus(role, "Ошибка связи: " + (r.error || "нет ответа"), false);
+      toast("Модель недоступна", true);
+    }
+  } catch (e) {
+    setRoleStatus(role, "Ошибка: " + e.message, false);
+    toast(e.message, true);
+  }
+}
+
+// Опросить провайдер и заполнить <select> моделями роли (общая логика).
+// notify=true — показать статус (при нажатии кнопки), иначе тихо.
+// desiredModel — модель из конфига, которую нужно выбрать после обновления
+// списка (при начальной загрузке). Если не задана — сохраняем текущий выбор.
+async function fetchRoleModels(role, notify = true, desiredModel = null) {
+  const els = roleEls(role);
+  if (!els || !els.model) return;
+  const baseUrl = els.baseUrl ? els.baseUrl.value.trim() : "";
+  const apiKey = els.apiKey ? els.apiKey.value.trim() : "";
+  if (!baseUrl) {
+    if (notify) setRoleStatus(role, "Сначала укажите адрес провайдера (API URL).", false);
+    return;
+  }
+  if (notify) setRoleStatus(role, "Получаем список моделей…");
+  const sel = els.model;
+  const prev = sel.value;
+  try {
+    const r = await api("/api/config/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl, apiKey, type: role }),
+    });
+    if (r.ok && Array.isArray(r.models) && r.models.length) {
+      // Модель из конфига/переменной окружения всегда остаётся в списке,
+      // даже если провайдер её сейчас не отдаёт (например, не загружена в Ollama).
+      const list = desiredModel && !r.models.includes(desiredModel)
+        ? [desiredModel, ...r.models]
+        : r.models;
+      sel.innerHTML =
+        '<option value="">— выберите модель —</option>' +
+        list.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+      const target = desiredModel || prev;
+      if (target && list.includes(target)) sel.value = target;
+      if (notify) {
+        setRoleStatus(role, `Найдено моделей: ${r.models.length}. Текущая: ${sel.value || "—"}.`, true);
+        toast("Список моделей обновлён");
+      }
+    } else {
+      // Провайдер не вернул модели — сохраняем текущую (env) модель видимой.
+      if (desiredModel) {
+        sel.innerHTML =
+          '<option value="">— выберите модель —</option>' +
+          `<option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
+        sel.value = desiredModel;
+      } else {
+        sel.innerHTML = '<option value="">модели не найдены</option>';
+      }
+      if (notify) {
+        setRoleStatus(
+          role,
+          "Модели не найдены: " + (r.error || "пусто") +
+            (desiredModel ? ` (используется ${desiredModel})` : ""),
+          false
+        );
+      }
+    }
+  } catch (e) {
+    // Ошибка сети/провайдера — не теряем текущую (env) модель, оставляем её видимой.
+    if (desiredModel) {
+      sel.innerHTML =
+        '<option value="">— выберите модель —</option>' +
+        `<option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
+      sel.value = desiredModel;
+    }
+    if (notify) setRoleStatus(role, "Ошибка: " + e.message, false);
+    else console.warn("Автоподгрузка моделей не удалась:", e);
+  }
+}
+
+export async function loadConfig() {
   try {
     const cfg = await api("/api/config");
-    console.log("Загруженный конфиг:", cfg);
-    
-    // Настройки классификатора
-    const classifierProv = (cfg.classifier && cfg.classifier.provider) || {};
-    const baseUrlInput = card.querySelector("[name=baseUrl]");
-    const apiKeyInput = card.querySelector("[name=apiKey]");
-    const modelInput = card.querySelector("[name=model]");
-    
-    if (baseUrlInput) baseUrlInput.value = classifierProv.baseUrl || "";
-    if (apiKeyInput) apiKeyInput.value = classifierProv.apiKey || "";
-    if (modelInput) modelInput.value = (cfg.classifier && cfg.classifier.model) || "";
-    const sysPromptInput = card.querySelector("[name=systemPrompt]");
-    if (sysPromptInput) sysPromptInput.value = (cfg.systemPrompt) || "";
-    
+
+    // Настройки обеих ролей — симметрично: провайдер + модель + промпт.
+    for (const role of Object.keys(ROLES)) {
+      const els = roleEls(role);
+      if (!els) continue;
+      const r = ROLES[role];
+      const prov = (cfg[role] && cfg[role].provider) || {};
+      if (els.baseUrl) els.baseUrl.value = prov.baseUrl || "";
+      if (els.apiKey) els.apiKey.value = prov.apiKey || "";
+      if (els.prompt) els.prompt.value = cfg[r.promptKey] || "";
+      // Модель подставляем после загрузки списка (desiredModel), т.к. <select>
+      // в этот момент ещё не содержит нужных <option>.
+      await fetchRoleModels(role, false, (cfg[role] && cfg[role].model) || "");
+    }
+
     // Часовой пояс
     state.timezone = (cfg && cfg.timezone) || "";
     populateTimezones();
     const tzSel = document.getElementById("cfg-timezone");
     if (tzSel) tzSel.value = state.timezone || "";
-    
+
     // Интервал обновления
     const refreshInput = document.getElementById("cfg-feed-refresh");
     if (refreshInput) {
       refreshInput.value = (cfg && cfg.schedule && cfg.schedule.feedRefreshMinutes) || 60;
     }
-    
-    // Настройки редактора
-    const editorProv = (cfg.editor && cfg.editor.provider) || {};
-    const editorBaseUrlInput = document.getElementById("editor-baseUrl");
-    const editorApiKeyInput = document.getElementById("editor-apiKey");
-    const editorModelSel = document.getElementById("editor-model");
-    
-    if (editorBaseUrlInput) editorBaseUrlInput.value = editorProv.baseUrl || "";
-    if (editorApiKeyInput) editorApiKeyInput.value = editorProv.apiKey || "";
-    if (editorModelSel) {
-        editorModelSel.value = (cfg.editor && cfg.editor.model) || "";
-    }
-    const edSysPromptInput = document.querySelector("[name=editorSystemPrompt]");
-    if (edSysPromptInput) edSysPromptInput.value = (cfg.editorSystemPrompt) || "";
-    
-    // Теперь, когда все поля заполнены, загружаем списки моделей и
-    // подставляем в выпадающие списки модели, сохранённые в конфиге.
-    // Значения моделей передаём явно: сам <select> в этот момент ещё не
-    // содержит нужных <option>, поэтому значение «не прилипает» и его
-    // нужно повторно выставить после перестройки списка из ответа API.
-    await fetchModels(false, (cfg.classifier && cfg.classifier.model) || "");
-    await populateEditorModels(false, (cfg.editor && cfg.editor.model) || "");
   } catch (e) {
     console.error("Ошибка при загрузке конфига:", e);
   }
@@ -200,207 +363,6 @@ function populateTimezones() {
   sel.innerHTML = opts
     .map((o) => `<option value="${escapeHtml(o.v)}">${escapeHtml(o.label)}</option>`)
     .join("");
-}
-
-// Опросить провайдера и заполнить <select> моделями.
-// notify=true — показать статус (при нажатии кнопки), иначе тихо.
-// desiredModel — модель из конфига, которую нужно выбрать после обновления
-// списка (при начальной загрузке). Если не задана — сохраняем текущий выбор.
-async function fetchModels(notify = true, desiredModel = null) {
-  const card = document.getElementById("classifier-card");
-  const st = document.getElementById("config-status");
-  if (!card) return;
-  
-  const baseUrlInput = card.querySelector("[name=baseUrl]");
-  const apiKeyInput = card.querySelector("[name=apiKey]");
-  
-  const baseUrl = baseUrlInput ? baseUrlInput.value.trim() : "";
-  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "";
-  
-  if (!baseUrl) {
-    if (notify) st.textContent = "Сначала укажите адрес провайдера (API URL).";
-    return;
-  }
-  if (notify) st.textContent = "Получаем список моделей…";
-  const sel = document.getElementById("cfg-model");
-  const prev = sel ? sel.value : "";
-  try {
-    const r = await api("/api/config/models", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ baseUrl, apiKey }),
-    });
-    if (r.ok && Array.isArray(r.models) && r.models.length) {
-      // Модель из конфига/переменной окружения всегда оставляем в списке,
-      // даже если провайдер её сейчас не отдаёт (например, не загружена в Ollama).
-      const list = desiredModel && !r.models.includes(desiredModel)
-        ? [desiredModel, ...r.models]
-        : r.models;
-      sel.innerHTML =
-        '<option value="">— выберите модель —</option>' +
-        list.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      const target = desiredModel || prev;
-      if (target && list.includes(target)) sel.value = target;
-      if (notify) {
-        st.textContent = `Найдено моделей: ${r.models.length}. Текущая: ${sel.value || "—"}.`;
-        toast("Список моделей обновлён");
-      }
-    } else {
-      // Провайдер не вернул модели — сохраняем текущую (env) модель видимой.
-      if (desiredModel) {
-        sel.innerHTML = `<option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
-        sel.value = desiredModel;
-      } else {
-        sel.innerHTML = '<option value="">модели не найдены</option>';
-      }
-      if (notify) st.textContent = "Модели не найдены: " + (r.error || "пусто") + (desiredModel ? ` (используется ${desiredModel})` : "");
-    }
-  } catch (e) {
-    // Ошибка сети/провайдера — не теряем текущую (env) модель, оставляем её видимой.
-    if (desiredModel && sel) {
-      sel.innerHTML = `<option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
-      sel.value = desiredModel;
-    }
-    if (notify) st.textContent = "Ошибка: " + e.message;
-    else console.warn("Автоподгрузка моделей не удалась:", e);
-  }
-}
-
-// Опросить провайдера и заполнить <select> моделей для ИИ-редактора.
-// notify=true — показать статус, иначе тихо (при открытии вкладки).
-// desiredModel — модель из конфига, которую нужно выбрать после обновления
-// списка (при начальной загрузке). Если не задана — сохраняем текущий выбор.
-async function populateEditorModels(notify = true, desiredModel = null) {
-  const editorBaseUrlInput = document.getElementById("editor-baseUrl");
-  const editorApiKeyInput = document.getElementById("editor-apiKey");
-  const sel = document.getElementById("editor-model");
-  const status = document.getElementById("editor-status");
-  
-  if (!editorBaseUrlInput || !sel) return;
-  
-  const baseUrl = editorBaseUrlInput.value.trim();
-  const apiKey = editorApiKeyInput ? editorApiKeyInput.value.trim() : "ollama";
-
-  if (!baseUrl) {
-    if (notify && status) status.textContent = "Укажите адрес провайдера.";
-    return;
-  }
-  
-  if (notify && status) status.textContent = "Получаем список моделей…";
-  
-  try {
-    const r = await api("/api/config/models", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ baseUrl, apiKey }),
-    });
-    if (r.ok && Array.isArray(r.models) && r.models.length) {
-      const cur = sel.value;
-      // Модель из конфига/переменной окружения всегда оставляем в списке.
-      const list = desiredModel && !r.models.includes(desiredModel)
-        ? [desiredModel, ...r.models]
-        : r.models;
-      sel.innerHTML =
-        '<option value="">— как у провайдера (общая модель) —</option>' +
-        list.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      const target = desiredModel || cur;
-      if (target && list.includes(target)) sel.value = target;
-      if (notify && status) {
-        status.className = "config-status ok";
-        status.textContent = `Моделей: ${r.models.length}. Текущая: ${sel.value || "—"}.`;
-      }
-    } else {
-      // Провайдер не вернул модели — сохраняем текущую (env) модель видимой.
-      if (desiredModel) {
-        sel.innerHTML = `<option value="">— как у провайдера (общая модель) —</option><option value="${escapeHtml(desiredModel)}">${escapeHtml(desiredModel)}</option>`;
-        sel.value = desiredModel;
-      } else {
-        sel.innerHTML = '<option value="">модели не найдены</option>';
-      }
-      if (notify && status) {
-        status.className = "config-status err";
-        status.textContent = "Модели не найдены: " + (r.error || "пусто");
-      }
-    }
-  } catch (e) {
-    if (notify && status) {
-      status.className = "config-status err";
-      status.textContent = "Ошибка: " + e.message;
-    }
-  }
-}
-
-async function saveConfig(e) {
-  if (e) e.preventDefault();
-  const card = document.getElementById("classifier-card");
-  const st = document.getElementById("config-status");
-  if (!card) return;
-  
-  // Данные классификатора
-  const classifierPayload = {
-    provider: {
-      baseUrl: card.querySelector("[name=baseUrl]").value.trim(),
-      apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
-    },
-    model: card.querySelector("[name=model]").value.trim(),
-    systemPrompt: (card.querySelector("[name=systemPrompt]") || {}).value || "",
-  };
-
-  // Данные редактора
-  const editorBaseUrlInput = document.getElementById("editor-baseUrl");
-  const editorApiKeyInput = document.getElementById("editor-apiKey");
-  const editorModelSel = document.getElementById("editor-model");
-  
-  const editorPayload = {
-    provider: {
-      baseUrl: editorBaseUrlInput ? editorBaseUrlInput.value.trim() : "",
-      apiKey: editorApiKeyInput ? editorApiKeyInput.value.trim() || "ollama" : "ollama",
-    },
-    model: editorModelSel ? editorModelSel.value.trim() : "",
-  };
-
-  const payload = {
-    classifier: classifierPayload,
-    editor: editorPayload,
-    systemPrompt: (card.querySelector("[name=systemPrompt]") || {}).value || "",
-    editorSystemPrompt: (document.querySelector("[name=editorSystemPrompt]") || {}).value || "",
-  };
-
-  try {
-    await api("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    st.className = "config-status ok";
-    st.textContent = "Сохранено. Применяется сразу.";
-    toast("Настройки ИИ сохранены");
-  } catch (e) {
-    st.className = "config-status err";
-    st.textContent = "Ошибка: " + e.message;
-    toast(e.message, true);
-  }
-}
-
-async function testConfig() {
-  const st = document.getElementById("config-status");
-  st.textContent = "Проверка связи…";
-  try {
-    const r = await api("/api/config/test", { method: "POST" });
-    if (r.ok) {
-      st.className = "config-status ok";
-      st.textContent = r.message || `Связь установлена. Модель ${r.model || ""} активна.`;
-      toast("Связь с моделью установлена");
-    } else {
-      st.className = "config-status err";
-      st.textContent = "Ошибка связи: " + (r.error || "нет ответа");
-      toast("Модель недоступна", true);
-    }
-  } catch (e) {
-    st.className = "config-status err";
-    st.textContent = "Ошибка: " + e.message;
-    toast(e.message, true);
-  }
 }
 
 // Обновить ТОЛЬКО счётчик найденных постов в каждой теме — без перерисовки
@@ -448,6 +410,32 @@ export function stopTopicsPolling() {
   }
 }
 
+// Подключить карточки «ИИ классификатор» и «ИИ редактор» — единая логика:
+// у каждой роли свой провайдер/модель, но одинаковые действия и оповещения
+// (сохранить → POST /api/config; проверить → POST /api/config/test + модели).
+export function initProviderCards() {
+  for (const role of Object.keys(ROLES)) {
+    const els = roleEls(role);
+    if (!els || !els.form || els.form.dataset.wired) continue;
+    els.form.dataset.wired = "1";
+
+    // Сохранить (сабмит формы карточки — у обеих ролей одинаково).
+    els.form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveRoleConfig(role);
+    });
+
+    // «Проверить соединение»: проверяет связь и заодно обновляет список
+    // моделей — одинаковые статусы и тосты для обеих ролей.
+    const testBtn = document.getElementById(ROLES[role].testBtnId);
+    if (testBtn)
+      testBtn.addEventListener("click", async () => {
+        await testRoleConnection(role);
+        await fetchRoleModels(role, true);
+      });
+  }
+}
+
 export function initTopics() {
   // Кнопка «Обновить» убрана: счётчик обновляется автоматически (поллинг 5с).
 
@@ -476,16 +464,6 @@ export function initTopics() {
     }
   });
 
-  const cfgForm = document.getElementById("form-provider");
-  const cfgTest = document.getElementById("config-test");
-  if (cfgForm) cfgForm.addEventListener("submit", saveConfig);
-  // «Проверить соединение» теперь и проверяет связь, и подгружает список моделей.
-  if (cfgTest)
-    cfgTest.addEventListener("click", async () => {
-      await testConfig();
-      await fetchModels(true);
-    });
-
   // Отдельная карточка «Настройка часового пояса».
   const tzForm = document.getElementById("form-timezone");
   const tzStatus = document.getElementById("tz-status");
@@ -498,7 +476,7 @@ export function initTopics() {
         await api("/api/config", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             timezone: tz,
             schedule: {
               feedRefreshMinutes: parseInt(refreshMin, 10) || 60
@@ -519,6 +497,9 @@ export function initTopics() {
   // Подстраховка: заполнить <select> часовых поясов при загрузке (карточка
   // может находиться во вкладке, которая ещё не открывалась).
   populateTimezones();
+
+  // Карточки «ИИ классификатор» и «ИИ редактор» (единая логика ролей).
+  initProviderCards();
 
   // Переключатели «ИИ-классификатор» и «ИИ-редактор» в шапке ленты.
   // Одновременно активен только один из них (взаимоисключающие).
@@ -547,13 +528,17 @@ export function initTopics() {
     });
   }
 
-  if (aiClassifier) {
-    aiClassifier.addEventListener("change", async () => {
-      const on = aiClassifier.checked;
+  // Общий обработчик переключателя роли: одинаковый сценарий для
+  // классификатора и редактора (обновить ленту → запустить обработку).
+  function wireAiToggle(toggleEl, otherEl, role) {
+    if (!toggleEl) return;
+    toggleEl.addEventListener("change", async () => {
+      const on = toggleEl.checked;
+      const label = role === "classifier" ? "ИИ-классификатор" : "ИИ-редактор";
       try {
         if (on) {
-          await applyAiMode("classifier");
-          if (aiEditor) aiEditor.checked = false;
+          await applyAiMode(role);
+          if (otherEl) otherEl.checked = false;
           try {
             await api("/api/refresh/posts", {
               method: "POST",
@@ -562,194 +547,28 @@ export function initTopics() {
             });
           } catch (_e) { /* обновление ленты не критично */ }
           try {
-            await api("/api/topics/run-all", { method: "POST" });
-          } catch (_e) { /* агент запустится по расписанию */ }
-          toast("ИИ-классификатор включён — модель запущена");
-        } else {
-          await applyAiMode("none");
-          toast("ИИ-классификатор выключен");
-        }
-      } catch (e) {
-        toast(e.message, true);
-        aiClassifier.checked = !on;
-      }
-    });
-  }
-
-  if (aiEditor) {
-    aiEditor.addEventListener("change", async () => {
-      const on = aiEditor.checked;
-      try {
-        if (on) {
-          await applyAiMode("editor");
-          if (aiClassifier) aiClassifier.checked = false;
-          try {
-            await api("/api/refresh/posts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ days: 1 }),
-            });
-          } catch (_e) { /* обновление ленты не критично */ }
-          try {
-            await api("/api/editor/run", {
+            const runUrl =
+              role === "classifier"
+                ? "/api/topics/run-all"
+                : "/api/editor/run";
+            await api(runUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({}),
             });
-          } catch (_e) { /* редактор запустится по расписанию */ }
-          toast("ИИ-редактор включён — обработка постов запущена");
+          } catch (_e) { /* обработка запустится по расписанию */ }
+          toast(`${label} включён — модель запущена`);
         } else {
           await applyAiMode("none");
-          toast("ИИ-редактор выключен");
+          toast(`${label} выключен`);
         }
       } catch (e) {
         toast(e.message, true);
-        aiEditor.checked = !on;
-      }
-    });
-  }
-}
-
-// ----- ИИ-редактор (глобальная/пакетная обработка) -----
-export function initEditorCard() {
-  const form = document.getElementById("form-editor");
-  const status = document.getElementById("editor-status");
-  if (!form || form.dataset.wired) return;
-  form.dataset.wired = "1";
-
-  // Настройки редактора (адрес, ключ, модель) и список моделей уже
-  // подгружаются из серверного конфига функцией loadConfig() — дублирующая
-  // загрузка из localStorage здесь не нужна и только мешает (гонка записей).
-  // Кнопка обновления списка моделей
-  // Убрана, теперь выполняется внутри testBtn.addEventListener
-  
-  // Кнопка сохранения настроек
-  const saveBtn = document.getElementById("editor-save");
-  if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-      await saveEditorConfig();
-      toast("Настройки ИИ-редактора сохранены");
-      if (status) {
-        status.className = "config-status ok";
-        status.textContent = "Настройки сохранены.";
+        toggleEl.checked = !on;
       }
     });
   }
 
-  // Кнопка проверки соединения
-  const testBtn = document.getElementById("editor-test");
-  if (testBtn) {
-    testBtn.addEventListener("click", async () => {
-      const baseUrlInput = document.getElementById("editor-baseUrl");
-      const apiKeyInput = document.getElementById("editor-apiKey");
-      if (!baseUrlInput) return;
-      
-      const baseUrl = baseUrlInput.value.trim();
-      const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "ollama";
-      
-      if (!baseUrl) {
-        if (status) status.textContent = "Укажите адрес провайдера.";
-        return;
-      }
-      
-      if (status) status.textContent = "Проверка связи и загрузка моделей…";
-      try {
-        const r = await api("/api/config/test", { 
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ baseUrl, apiKey })
-        });
-        if (r.ok) {
-          if (status) {
-            status.className = "config-status ok";
-            status.textContent = r.message || "Связь установлена.";
-          }
-          toast("Связь с моделью редактора установлена");
-          // Одновременно загружаем список моделей
-          await fetchEditorModels(false);
-        } else {
-          if (status) {
-            status.className = "config-status err";
-            status.textContent = "Ошибка: " + (r.error || "нет ответа");
-          }
-          toast("Модель недоступна", true);
-        }
-      } catch (e) {
-        if (status) {
-          status.className = "config-status err";
-          status.textContent = "Ошибка: " + e.message;
-        }
-        toast(e.message, true);
-      }
-    });
-  }
-
-}
-
-// Сохранение конфигурации ИИ-редактора в localStorage
-async function saveEditorConfig() {
-  const baseUrlInput = document.getElementById("editor-baseUrl");
-  const apiKeyInput = document.getElementById("editor-apiKey");
-  const modelSel = document.getElementById("editor-model");
-  
-  if (!baseUrlInput || !apiKeyInput || !modelSel) return;
-
-  const cfg = {
-    baseUrl: baseUrlInput.value.trim(),
-    apiKey: apiKeyInput.value.trim(),
-    model: modelSel.value
-  };
-  localStorage.setItem("editorConfig", JSON.stringify(cfg));
-}
-
-// Опросить провайдера и заполнить <select> моделей для ИИ-редактора.
-async function fetchEditorModels(notify = true) {
-  const baseUrlInput = document.getElementById("editor-baseUrl");
-  const apiKeyInput = document.getElementById("editor-apiKey");
-  const sel = document.getElementById("editor-model");
-  const status = document.getElementById("editor-status");
-  
-  if (!baseUrlInput || !sel) return;
-  
-  const baseUrl = baseUrlInput.value.trim();
-  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "ollama";
-
-  if (!baseUrl) {
-    if (notify && status) status.textContent = "Укажите адрес провайдера.";
-    return;
-  }
-  
-  if (notify && status) status.textContent = "Получаем список моделей…";
-  
-  try {
-    const r = await api("/api/config/models", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ baseUrl, apiKey }),
-    });
-    if (r.ok && Array.isArray(r.models) && r.models.length) {
-      const cur = sel.value;
-      sel.innerHTML =
-        '<option value="">— как у провайдера (общая модель) —</option>' +
-        r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      if (cur && r.models.includes(cur)) sel.value = cur;
-      if (notify && status) {
-        status.className = "config-status ok";
-        status.textContent = `Моделей: ${r.models.length}.`;
-      }
-      // Сохраняем успешную конфигурацию
-      await saveEditorConfig();
-    } else {
-      sel.innerHTML = '<option value="">модели не найдены</option>';
-      if (notify && status) {
-        status.className = "config-status err";
-        status.textContent = "Модели не найдены: " + (r.error || "пусто");
-      }
-    }
-  } catch (e) {
-    if (notify && status) {
-      status.className = "config-status err";
-      status.textContent = "Ошибка: " + e.message;
-    }
-  }
+  wireAiToggle(aiClassifier, aiEditor, "classifier");
+  wireAiToggle(aiEditor, aiClassifier, "editor");
 }

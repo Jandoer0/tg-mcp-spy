@@ -1,10 +1,10 @@
 """Локальный ИИ-агент для отбора постов в «Мои темы».
 
-Использует слабую локальную модель через OpenAI-совместимый эндпоинт
-(по умолчанию Ollama). Задача модели — по теме (тегу) отобрать из общей
-ленты посты, относящиеся к теме, и «скопировать» их в хронологию темы.
-Без аналитики: модель только помечает релевантные посты (mode='ai'),
-«движок» сайта сам собирает отобранные посты в отслеживаемую тему.
+Использует модель через общий OpenAI-совместимый клиент (topics.provider), роль
+«classifier». Задача модели — по теме (тегу) отобрать из общей ленты посты,
+относящиеся к теме, и «скопировать» их в хронологию темы. Без аналитики: модель
+только помечает релевантные посты (mode='ai'), «движок» сайта сам собирает
+отобранные посты в отслеживаемую тему.
 """
 from __future__ import annotations
 
@@ -13,12 +13,9 @@ import logging
 import os
 import re
 import threading
-import time
 from typing import Optional
 
-import httpx
-
-from ..config import get_provider, load_config
+from ..config import load_config
 from ..db import (
     get_excluded_ids,
     get_posts_after,
@@ -28,41 +25,12 @@ from ..db import (
     tag_post,
     update_topic_run,
 )
+from .provider import abort_requests, call_role, last_provider_error
 
 logger = logging.getLogger(__name__)
 
-# Реестр активных HTTP-клиентов к модели для принудительного прерывания.
-# Закрытие соединения извне = чёткий сигнал модели остановить генерацию
-# (используется, когда пользователь выключает соответствующий переключатель).
-# Ключ — id объекта клиента; значение — (клиент, kind).
-_active_requests: dict[int, tuple] = {}
-_active_lock = threading.Lock()
-
-
-def abort_requests(kind: str | None = None) -> int:
-    """Принудительно оборвать активные запросы к модели.
-
-    Если ``kind`` задан ("classifier"/"editor") — только соответствующие,
-    иначе все. Закрытие клиента прерывает блокирующий вызов и заставляет
-    модель прекратить генерацию. Возвращает число прерванных соединений.
-    """
-    with _active_lock:
-        targets = [
-            (cid, _active_requests[cid])
-            for cid in list(_active_requests)
-            if kind is None or _active_requests[cid][1] == kind
-        ]
-        for cid, _ in targets:
-            del _active_requests[cid]
-    n = 0
-    for _cid, (client, _k) in targets:
-        try:
-            client._tg_aborted = True
-            client.close()
-            n += 1
-        except Exception:
-            pass
-    return n
+# abort_requests переиспользуется из общего слоя (см. src/tg_spy/topics/provider.py).
+__all__ = ["abort_requests"]
 
 # Сколько постов за один вызов модели.
 AGENT_BATCH = int(os.environ.get("AGENT_BATCH", "10"))
@@ -72,88 +40,28 @@ POST_EXCERPT_CHARS = int(os.environ.get("AGENT_EXCERPT_CHARS", "400"))
 TAG_DESCRIPTION_CHARS = int(os.environ.get("AGENT_DESCRIPTION_CHARS", "280"))
 # Сколько пачек обработать за один прогон.
 AGENT_MAX_BATCHES = int(os.environ.get("AGENT_MAX_BATCHES", "20"))
-# Число повторных попыток обращения к модели при сбоях.
-AGENT_RETRIES = int(os.environ.get("AGENT_RETRIES", "2"))
-# Пауза между попытками (сек), растёт линейно.
-AGENT_RETRY_BACKOFF = float(os.environ.get("AGENT_RETRY_BACKOFF", "1.5"))
-# Таймаут одного запроса к модели (сек).
-AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 
 
-def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] = None, provider_name: str = "classifier", abortable: bool = False) -> Optional[str]:
-    """Один вызов OpenAI-совместимого chat/completions. Возвращает текст.
+def _chat(
+    messages: list[dict],
+    temperature: float = 0.0,
+    model: Optional[str] = None,
+    abortable: bool = True,
+) -> Optional[str]:
+    """Один вызов chat/completions для классификатора. Возвращает текст или None.
 
-    Если ``abortable=True`` — текущий HTTP-клиент регистрируется в глобальном
-    реестре, чтобы внешний вызов :func:`abort_requests` мог принудительно
-    оборвать соединение (чёткий сигнал модели остановиться).
+    Использует единую для обеих ролей логику :func:`provider.call_role`:
+    свои настройки провайдера/модели, но общие повторы, ошибки и прерывание.
+    Возвращает ``None`` при недоступности модели или прерывании извне.
     """
-    cfg = load_config()
-    prov = get_provider(cfg, provider_name=provider_name)
-    base = (prov.base_url or "http://127.0.0.1:11434/v1").rstrip("/")
-    url = f"{base}/chat/completions"
-    if provider_name == "classifier":
-        model = model or cfg.classifier.model or "llama3.2"
-    else:
-        model = model or cfg.editor_model or "llama3.2"
-    api_key = prov.api_key or "ollama"
-    compat = prov.compat
-
-    sys_role = "developer" if compat.supports_developer_role else "system"
-    msgs = []
-    for m in messages:
-        if m.get("role") == "system":
-            msgs.append({"role": sys_role, "content": m["content"]})
-        else:
-            msgs.append(m)
-
-    payload = {
-        "model": model,
-        "messages": msgs,
-        "temperature": temperature,
-        "stream": False,
-    }
-    if compat.disable_thinking:
-        payload["think"] = False
-    if compat.json_object_format:
-        payload["format"] = {"type": "json_object"}
-
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    attempts = max(0, AGENT_RETRIES) + 1
-    last_err: Optional[Exception] = None
-    client = None
-    for attempt in range(attempts):
-        try:
-            client = httpx.Client(timeout=AGENT_REQUEST_TIMEOUT)
-            if abortable:
-                with _active_lock:
-                    _active_requests[id(client)] = (client, provider_name)
-            try:
-                resp = client.post(url, headers=headers, json=payload)
-            finally:
-                if abortable:
-                    with _active_lock:
-                        _active_requests.pop(id(client), None)
-            client.close()
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:  # таймаут, сетевая ошибка, не-JSON, 5xx
-            last_err = e
-            # Прервано извне (выключение переключателя) — повторять не нужно.
-            if client is not None and getattr(client, "_tg_aborted", False):
-                logger.info("Запрос к модели прерван извне (переключатель выключен)")
-                return None
-            logger.warning(
-                "Ошибка обращения к модели (попытка %d/%d, %s): %s",
-                attempt + 1, attempts, url, e,
-            )
-            if attempt < attempts - 1:
-                time.sleep(AGENT_RETRY_BACKOFF * (attempt + 1))
-    logger.error("Модель недоступна после %d попыток (%s): %s", attempts, url, last_err)
-    return None
+    result = call_role(
+        "classifier",
+        messages,
+        temperature=temperature,
+        model=model,
+        abortable=abortable,
+    )
+    return result.content if result.ok else None
 
 
 def _extract_json(text: str) -> Optional[dict]:
@@ -290,7 +198,10 @@ def run_topic_agent(
             content = None
         if content is None:
             # Нет ответа модели — НЕ сдвигаем high-water mark, чтобы эту
-            # пачку можно было повторить в следующем прогоне.
+            # пачку можно было повторить в следующем прогоне. Текст ошибки —
+            # тот же механизм, что у редактора (provider.last_provider_error).
+            if not error:
+                error = last_provider_error("classifier") or "нет соединения"
             logger.warning(
                 "Агент по теме %s: нет ответа модели, пачка пропущена (повтор при следующем запуске)",
                 topic.get("name"),
@@ -331,132 +242,3 @@ def run_topic_agent_async(
             logger.error("Фоновый прогон агента упал: %s", e)
 
     threading.Thread(target=_t, name="topic-agent", daemon=True).start()
-
-
-def _names_from_openai(data) -> list[str]:
-    """Извлечь имена моделей из ответа OpenAI-совместимого /models."""
-    out: list[str] = []
-    items = data.get("data") if isinstance(data, dict) else data
-    if isinstance(items, list):
-        for m in items:
-            if isinstance(m, dict):
-                name = m.get("id") or m.get("name") or m.get("model")
-                if name:
-                    out.append(str(name))
-    return out
-
-
-def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> Optional[str]:
-    """Прогнать текст поста через ИИ-редактор (нормализация форматирования,
-    удаление мусора, сохранение фактуры). Возвращает отредактированный текст
-    или None при недоступности модели.
-
-    Переиспользует существующий OpenAI-совместимый провайдер/комплишнсы
-    (тот же, что и в тематическом агенте). Температура 0 — детерминированно.
-    """
-    text = (text or "").strip()
-    if not text:
-        return None
-    if len(text) > max_chars:
-        text = text[:max_chars]
-    cfg = load_config()
-    system = cfg.editor_system_prompt
-    content = _chat(
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": text},
-        ],
-        temperature=0.0,
-        model=model,
-        provider_name="editor", abortable=True,
-    )
-    if content is None:
-        return None
-    # Модель может вернуть с минимальной обёрткой — снимаем, если это просто текст.
-    cleaned = content.strip()
-    return cleaned or None
-
-
-def list_models(base_url: str, api_key: str) -> dict:
-    """Запросить у провайдера список доступных моделей."""
-    base = (base_url or "").strip().rstrip("/")
-    if not base:
-        return {"ok": False, "error": "Не указан адрес провайдера (API URL)"}
-    
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    models: list[str] = []
-    last_err = None
-
-    # Определяем корневой URL для Ollama API
-    ollama_root = base
-    if base.endswith("/v1"):
-        ollama_root = base[:-3]
-
-    # 1) Пробуем нативный Ollama /api/tags (наиболее надежный для Ollama)
-    try:
-        resp = httpx.get(f"{ollama_root}/api/tags", headers=headers, timeout=15.0)
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, dict) and "models" in data:
-                models = [str(m["name"]) for m in data["models"] if isinstance(m, dict) and m.get("name")]
-            elif isinstance(data, list):
-                models = [str(m["name"]) for m in data if isinstance(m, dict) and m.get("name")]
-    except Exception as e:
-        last_err = e
-
-    # 2) Если не вышло, пробуем OpenAI-совместимый /models
-    if not models:
-        try:
-            resp = httpx.get(f"{base}/models", headers=headers, timeout=15.0)
-            if resp.status_code == 200:
-                models = _names_from_openai(resp.json())
-        except Exception as e:
-            if last_err is None:
-                last_err = e
-
-    models = sorted(set(filter(None, models)))
-    if models:
-        return {"ok": True, "models": models}
-    
-    err_msg = str(last_err) if last_err else "пусто"
-    return {"ok": False, "error": f"Не удалось получить список моделей: {err_msg}"}
-
-
-def test_connection(provider_name: str = "classifier") -> dict:
-    """Проверить связь с провайдером/моделью (для кнопки «Проверить соединение»)."""
-    cfg = load_config()
-    if provider_name == "classifier":
-        model = cfg.classifier.model or "llama3.2"
-    else:
-        model = cfg.editor_model or "llama3.2"
-    try:
-        content = _chat(
-            [
-                {"role": "system", "content": cfg.system_prompt},
-                {
-                    "role": "user",
-                    "content": "Кратко подтверди, что ты на связи, одним-двумя словами.",
-                },
-            ],
-            temperature=0.0,
-            provider_name=provider_name,
-        )
-        if content is None:
-            return {
-                "ok": False,
-                "model": model,
-                "error": "Модель не вернула ответ (нет соединения / таймаут / ошибка провайдера)",
-            }
-        reply = (content or "").strip()[:200]
-        # Читаемое сообщение для UI: «Связь установлена. Модель <имя> активна.»
-        return {
-            "ok": True,
-            "model": model,
-            "reply": reply,
-            "message": f"Связь установлена. Модель {model} активна.",
-        }
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "model": model, "error": str(e)}

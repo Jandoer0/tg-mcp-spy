@@ -151,29 +151,41 @@ mcp_servers:
    внутри темы) — после этого агент сможет снова отобрать пост(ы) при
    следующем прогоне.
 
-Тема обслуживается **локальной моделью** через OpenAI-совместимый
-эндпоинт (по умолчанию **Ollama**). Конфигурация провайдера лежит в
-`config.json` рядом с кодом (можно переопределить переменными окружения):
+Тема обслуживается моделью через OpenAI-совместимый эндпоинт (по умолчанию
+**Ollama**). У **ИИ-классификатора** и **ИИ-редактора** — **две независимые
+конфигурации провайдеров** (свой baseUrl/ключ/модель у каждой роли): можно
+держать классификатор на локальной модели, а редактор — у облачного
+провайдера. Логика работы с провайдером при этом **одна и та же** для обеих
+ролей: единый клиент (`topics/provider.py`), одинаковые повторы/таймауты,
+одинаковые ошибки и оповещения. Конфигурация лежит в `config.json` рядом
+с кодом (можно переопределить переменными окружения):
 
 ```json
 {
-  "provider": "ollama",
-  "model": "qwen3:4b",
-  "schedule": { "enabled": true, "feedRefreshMinutes": 60, "topicMinutes": 1440 },
-  "providers": {
-    "ollama": {
+  "classifier": {
+    "provider": {
       "baseUrl": "http://host.containers.internal:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
-      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false, "jsonObjectFormat": true, "disableThinking": true }
-    }
-  }
+      "compat": { "supportsDeveloperRole": false, "jsonObjectFormat": true, "disableThinking": true }
+    },
+    "model": "qwen3:4b"
+  },
+  "editor": {
+    "provider": {
+      "baseUrl": "https://api.example.com/v1",
+      "apiKey": "sk-...",
+      "compat": { "supportsDeveloperRole": false, "jsonObjectFormat": false, "disableThinking": false }
+    },
+    "model": "gpt-4o-mini"
+  },
+  "schedule": { "enabled": true, "feedRefreshMinutes": 60, "topicMinutes": 1440 }
 }
 ```
 
 > Модель должна быть заранее загружена в Ollama: `ollama pull qwen3:4b`.
-> Если Ollama на другом хосте — укажите `AGENT_BASE_URL` (например
-> `http://host.docker.internal:11434/v1` из контейнера).
+> Если Ollama на другом хосте — укажите `AGENT_CLASSIFIER_URL` / `AGENT_EDITOR_URL`
+> (например `http://host.docker.internal:11434/v1` из контейнера).
 
 **Авто-обновление ленты и периодичность агента.** В отдельном фоновом
 потоке крутится планировщик: он сам обновляет ленту (раз в

@@ -21,7 +21,7 @@ from ..db import (
     set_post_editor_status,
 )
 from ..config import load_config
-from . import agent
+from .provider import call_role, last_provider_error
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,45 @@ logger = logging.getLogger(__name__)
 EDITOR_BATCH = int(os.environ.get("EDITOR_BATCH", "10"))
 # За сколько дней брать посты для пакетной обработки (0 = все).
 EDITOR_DAYS = int(os.environ.get("EDITOR_DAYS", "7"))
+
+
+def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> Optional[str]:
+    """Прогнать текст поста через ИИ-редактора (роль 'editor').
+
+    Возвращает отредактированный текст или None при недоступности модели.
+    Использует единую для обеих ролей логику :func:`provider.call_role`
+    (как и классификатор): свой провайдер/модель из конфига, общие повторы,
+    ошибки и прерывание. Для диагностики — :func:`last_provider_error('editor')`
+    (тот же механизм и тексты, что у классификатора).
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
+    if len(text) > max_chars:
+        text = text[:max_chars]
+    cfg = load_config()
+    result = call_role(
+        "editor",
+        [
+            {"role": "system", "content": cfg.editor_system_prompt},
+            {"role": "user", "content": text},
+        ],
+        temperature=0.0,
+        output_format="text",  # редактор возвращает Markdown, а не JSON
+        model=model,
+        abortable=True,
+    )
+    if not result.ok:
+        return None
+    return result.content or None
+
+
+def last_editor_error() -> Optional[str]:
+    """Последняя ошибка провайдера редактора (для уведомлений в UI).
+
+    Тот же механизм, что у классификатора (:func:`provider.last_provider_error`).
+    """
+    return last_provider_error("editor")
 
 
 def _text_of(post: dict) -> str:
@@ -50,14 +89,18 @@ def edit_one_post(post_id: int) -> dict:
         return {"post_id": post_id, "ok": False, "error": "пустой текст", "skipped": True}
     # Уже отредактирован и не требует повтора — пропускаем при пакетном прогоне,
     # но для явного персонального запуска обрабатываем заново.
-    cfg = load_config()
-    edited = agent.edit_text(original, model=cfg.editor_model)
+    edited = edit_text(original)
     if edited is None:
         set_post_editor_status(post_id, "none")
+        detail = last_editor_error() or "нет соединения"
+        logger.warning(
+            "Модель редактора недоступна (пост %s): %s", post_id, detail,
+        )
         return {
             "post_id": post_id,
             "ok": False,
             "error": "модель недоступна",
+            "detail": detail,
         }
     saved = set_post_edited(post_id, edited)
     if saved:
@@ -69,8 +112,6 @@ def edit_one_post(post_id: int) -> dict:
         "edited_len": len(edited),
         "changed": edited.strip() != original,
     }
-
-
 
 
 def edit_post_async(post_id: int) -> None:

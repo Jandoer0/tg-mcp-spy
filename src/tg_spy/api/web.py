@@ -29,9 +29,8 @@ from ..db import (
 )
 from ..ingest import rss
 from ..ingest.refresh import refresh_all_sources
-from ..topics import agent, service
+from ..topics import agent, provider, service
 from ..topics import editor as editor_svc
-from ..config import load_config
 
 WEB_DIR = Path(__file__).parent.parent / "web" / "static"
 
@@ -400,17 +399,24 @@ async def api_config(request: Request) -> JSONResponse:
     cfg = load_config()
     cur = cfg.to_legacy_dict()
     
-    # Сохранение классификатора
+    # Сохранение классификатора (мердж провайдера: compat-флаги не теряются,
+    # если их не прислали — та же логика, что у редактора)
     if "classifier" in data:
         c_data = data["classifier"]
-        cur["classifier"]["provider"] = c_data.get("provider", cur["classifier"]["provider"])
-        cur["classifier"]["model"] = c_data.get("model", cur["classifier"]["model"])
+        if isinstance(c_data, dict):
+            if isinstance(c_data.get("provider"), dict):
+                cur["classifier"]["provider"].update(c_data["provider"])
+            if c_data.get("model") is not None:
+                cur["classifier"]["model"] = c_data["model"]
     
-    # Сохранение редактора
+    # Сохранение редактора (симметрично классификатору)
     if "editor" in data:
         e_data = data["editor"]
-        cur["editor"]["provider"] = e_data.get("provider", cur["editor"]["provider"])
-        cur["editor"]["model"] = e_data.get("model", cur["editor"]["model"])
+        if isinstance(e_data, dict):
+            if isinstance(e_data.get("provider"), dict):
+                cur["editor"]["provider"].update(e_data["provider"])
+            if e_data.get("model") is not None:
+                cur["editor"]["model"] = e_data["model"]
 
     # Системные промпты (редактируются пользователем в карточках ИИ).
     if "systemPrompt" in data:
@@ -454,9 +460,26 @@ async def api_config(request: Request) -> JSONResponse:
 
 
 async def api_config_test(request: Request) -> JSONResponse:
-    provider_type = request.query_params.get("type", "classifier")
+    """Проверить связь с провайдером/моделью роли.
+
+    Одна и та же логика для классификатора и редактора: роль задаётся
+    параметром ``type`` (query или тело), необязательные ``baseUrl``/``apiKey``
+    из тела позволяют проверить значения из формы до сохранения.
+    """
+    body = await _json(request, default={})
+    provider_type = (
+        request.query_params.get("type") or body.get("type") or "classifier"
+    ).strip()
+    if provider_type not in ("classifier", "editor"):
+        provider_type = "classifier"
     try:
-        return JSONResponse(agent.test_connection(provider_name=provider_type))
+        return JSONResponse(
+            provider.test_connection(
+                provider_name=provider_type,
+                base_url=(body.get("baseUrl") or None),
+                api_key=(body.get("apiKey") or None),
+            )
+        )
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(e)})
 
@@ -464,22 +487,20 @@ async def api_config_test(request: Request) -> JSONResponse:
 async def api_config_models(request: Request) -> JSONResponse:
     """Запросить у провайдера список доступных моделей.
 
-    Тело запроса: {"baseUrl": "...", "apiKey": "..."} (адрес берётся из поля
-    ввода, а не из сохранённого конфига — чтобы пользователь мог проверить
-    новый адрес до сохранения). Если тело пустое — берётся сохранённый конфиг.
+    Тело запроса: {"baseUrl": "...", "apiKey": "...", "type": "classifier"|"editor"}
+    (адрес берётся из поля ввода; если не указан — из сохранённого конфига роли).
+    Роль (type) определяет, настройки какого провайдера взять по умолчанию.
     """
     body = await _json(request, default={})
     base_url = (body.get("baseUrl") or "").strip()
     api_key = (body.get("apiKey") or "").strip()
-    if not base_url:
-        cfg = load_config()
-        # По умолчанию берем провайдера классификатора
-        # (у ClassifierConfig провайдер вложен в .provider)
-        prov = cfg.classifier.provider
-        base_url = prov.base_url or ""
-        api_key = api_key or (prov.api_key or "")
+    provider_type = (body.get("type") or "classifier").strip()
+    if provider_type not in ("classifier", "editor"):
+        provider_type = "classifier"
     try:
-        return JSONResponse(agent.list_models(base_url, api_key))
+        return JSONResponse(
+            provider.list_models(base_url, api_key, provider_name=provider_type)
+        )
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(e)})
 

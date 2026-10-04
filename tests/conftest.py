@@ -13,8 +13,11 @@ for _p in (_DB, _CFG):
 
 os.environ["DB_PATH"] = _DB
 os.environ["AGENT_CONFIG"] = _CFG
-# Указываем локальный эндпоинт, чтобы agent-тесты мокали его предсказуемо.
-os.environ["AGENT_BASE_URL"] = "http://127.0.0.1:11434/v1"
+# Указываем локальные эндпоинты ОБЕИХ ролей (у классификатора и редактора
+# свои провайдеры), чтобы agent/provider-тесты мокали их предсказуемо
+# и не зависели от реальной Ollama на хосте.
+os.environ["AGENT_CLASSIFIER_URL"] = "http://127.0.0.1:11434/v1"
+os.environ["AGENT_EDITOR_URL"] = "http://127.0.0.1:11435/v1"
 
 
 @pytest.fixture(autouse=True)

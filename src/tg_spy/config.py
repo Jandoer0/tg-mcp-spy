@@ -7,7 +7,6 @@
 """
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import os
@@ -71,25 +70,35 @@ class ClassifierConfig(BaseModel):
     enabled: bool = True
 
 
+class EditorConfig(BaseModel):
+    """Конфигурация ИИ-редактора — симметрична классификатору.
+
+    Свой провайдер и своя модель: пользователь может, например, держать
+    классификатор на локальной Ollama, а редактор — у облачного провайдера.
+    Логика работы с провайдером при этом общая (topics.provider).
+    """
+    provider: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
+        base_url="http://host.containers.internal:11434/v1",
+        api_key="ollama",
+        compat=ProviderCompat(disable_thinking=True)
+    ))
+    model: str = "qwen3:4b"
+
+
 # Дефолтный системный промпт ИИ-редактора (редактируется в интерфейсе).
-EDITOR_SYSTEM_PROMPT_DEFAULT = (
-    "Ты — редактор новостной ленты. Твоя задача — очистить текст от мусора, "
-    "сохранив при этом структуру, смысл и attribution (указание источников).\n\n"
-    "Очищай только лёгкий мусор: явные призывы подписаться/лайкнуть/перейти "
-    "(«Подпишись», «Больше новостей на…», «@channel», «Жми колокольчик») и подряд "
-    "дублирующиеся строки. Не удаляй названия медиа/каналов/сайтов как указание "
-    "источника («— iPhones.ru», «Источник: Meduza»); убирай декоративные эмодзи "
-    "(оставляй смысловые: флаги, валюты); лишние пустые строки своди к одной.\n\n"
-    "ОФОРМЛЕНИЕ — только лёгкая разметка Markdown, и НЕ МЕНЯЙ высоту/объём текста "
-    "(не сокращай и не дописывай суть, не добавляй от себя ни слова):\n"
-    "- Если в начале поста есть заголовок или анонс — выдели его **жирным** "
-    "(одна строка, без добавленного текста).\n"
-    "- В длинных постах (примерно от 5 строк) выдели **жирным** одну-две ключевые "
-    "фразы, передающие главную мысль (без пересказа и без добавлений).\n"
-    "- Ссылки на источники, если они уже есть в тексте, оформляй как Markdown-ссылки "
-    "[текст](url); не придумывай ссылок.\n\n"
-    "Верни только итоговый текст. Без вступлений, пояснений и заключений."
-)
+EDITOR_SYSTEM_PROMPT_DEFAULT = """Ты — редактор новостной ленты. Твоя задача — оформить пост минимальной разметкой Markdown, не меняя его смысл, факты и примерно тот же объём.
+
+Что делать с содержимым:
+1. По сути оставь текст без изменений. Убери только явный мусор: призывы подписаться/лайкнуть/перейти («Подпишись», «Больше новостей на…», «@channel», «Жми колокольчик») и подряд повторяющиеся строки.
+2. Не удаляй названия медиа/каналов/сайтов как указание источника («— iPhones.ru», «Источник: Meduza»). Декоративные эмодзи убирай (смысловые — флаги, валюты — оставляй). Лишние пустые строки своди к одной между абзацами.
+
+ОБЯЗАТЕЛЬНОЕ ОФОРМЛЕНИЕ (это и есть задача — примени разметку к исходному тексту):
+- Если в начале поста есть заголовок или анонс — оберни его в **жирный** шрифт: **заголовок**.
+- В длинных постах (от ~5 строк) выдели **жирным** одну-две самые важные фразы, передающие главную мысль (без пересказа).
+- Ссылки и упоминания-ссылки вида @канал или название сайта-источника, если они являются ссылками, оформляй как Markdown-ссылку [текст](url). Не придумывай ссылок, если их нет в тексте.
+- Не добавляй новых абзацев, подзаголовков и никаких пояснений.
+
+Верни ТОЛЬКО отформатированный текст поста. Без вступлений, комментариев и заключений."""
 
 
 class AppConfig(BaseModel):
@@ -98,13 +107,8 @@ class AppConfig(BaseModel):
     # Полные настройки классификатора
     classifier: ClassifierConfig = Field(default_factory=ClassifierConfig)
     
-    # Полные настройки редактора
-    editor: ProviderConfig = Field(default_factory=lambda: ProviderConfig(
-        base_url="http://host.containers.internal:11434/v1",
-        api_key="ollama",
-        compat=ProviderCompat(disable_thinking=True)
-    ))
-    editor_model: str = "qwen3:4b"
+    # Полные настройки редактора (симметрично классификатору)
+    editor: EditorConfig = Field(default_factory=EditorConfig)
 
     timezone: str = ""  # IANA-зона для отображения времени; "" = локальное время браузера
     system_prompt: str = (
@@ -157,8 +161,8 @@ class AppConfig(BaseModel):
                 "enabled": c_enabled,
             },
             "editor": {
-                "provider": prov_to_dict(d["editor"]),
-                "model": d["editor_model"],
+                "provider": prov_to_dict(d["editor"]["provider"]),
+                "model": d["editor"]["model"],
             },
             "timezone": d["timezone"],
             "systemPrompt": d["system_prompt"],
@@ -210,12 +214,21 @@ class AppConfig(BaseModel):
             c_provider = dict_to_prov(classifier_data)
             c_model = data.get("classifier_model", "qwen3:4b")
             classifier_cfg = ClassifierConfig(provider=c_provider, model=c_model, enabled=True)
+
+        # Обработка редактора — симметрично классификатору (вложенный provider)
+        if "provider" in editor_data:
+            e_provider = dict_to_prov(editor_data.get("provider"))
+            e_model = editor_data.get("model", "qwen3:4b")
+        else:
+            # Старая структура (плоская) + старое поле editor_model
+            e_provider = dict_to_prov(editor_data)
+            e_model = data.get("editor_model", editor_data.get("model", "qwen3:4b"))
+        editor_cfg = EditorConfig(provider=e_provider, model=e_model)
         
         sched = data.get("schedule") or {}
         return cls(
             classifier=classifier_cfg,
-            editor=dict_to_prov(editor_data.get("provider")),
-            editor_model=editor_data.get("model", "qwen3:4b"),
+            editor=editor_cfg,
             timezone=data.get("timezone", ""),
             system_prompt=data.get(
                 "systemPrompt",
@@ -259,15 +272,9 @@ def load_config() -> AppConfig:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             user = json.load(f)
         if isinstance(user, dict):
-            user_cfg = AppConfig.from_legacy_dict(user)
-            # Обновляем поля cfg значениями из user_cfg
-            # Используем model_dump для обновления, чтобы сохранить структуру
-            cfg_data = cfg.model_dump()
-            user_data = user_cfg.model_dump()
-            
-            # Обновляем только те поля, которые были явно заданы в json
-            # (для простоты обновляем всё из user_cfg, так как from_legacy_dict уже применил дефолты)
-            cfg = user_cfg
+            # from_legacy_dict уже применил дефолты к значениям из файла —
+            # используем результат как итоговый конфиг.
+            cfg = AppConfig.from_legacy_dict(user)
     except FileNotFoundError:
         logger.info("config.json не найден, используются значения по умолчанию")
     except Exception as e:
@@ -282,13 +289,13 @@ def load_config() -> AppConfig:
     if os.environ.get("AGENT_CLASSIFIER_MODEL"):
         cfg.classifier.model = os.environ["AGENT_CLASSIFIER_MODEL"]
     
-    # Редактор
+    # Редактор (своя конфигурация провайдера/модели — как у классификатора)
     if os.environ.get("AGENT_EDITOR_URL"):
-        cfg.editor.base_url = os.environ["AGENT_EDITOR_URL"]
+        cfg.editor.provider.base_url = os.environ["AGENT_EDITOR_URL"]
     if os.environ.get("AGENT_EDITOR_KEY"):
-        cfg.editor.api_key = os.environ["AGENT_EDITOR_KEY"]
+        cfg.editor.provider.api_key = os.environ["AGENT_EDITOR_KEY"]
     if os.environ.get("AGENT_EDITOR_MODEL"):
-        cfg.editor_model = os.environ["AGENT_EDITOR_MODEL"]
+        cfg.editor.model = os.environ["AGENT_EDITOR_MODEL"]
 
     if os.environ.get("AGENT_TIMEZONE"):
         cfg.timezone = os.environ["AGENT_TIMEZONE"]
@@ -321,10 +328,26 @@ def get_provider(cfg: AppConfig | None = None, provider_name: str | None = None)
     """
     cfg = cfg or load_config()
     if provider_name == "editor":
-        return cfg.editor
+        return cfg.editor.provider
     # У классификатора провайдер вложен в cfg.classifier.provider
     # (cfg.classifier — это ClassifierConfig, а не ProviderConfig).
     return cfg.classifier.provider
+
+
+def role_model(cfg: AppConfig | None = None, role: str = "classifier") -> str:
+    """Модель роли (одинаковые правила для классификатора и редактора)."""
+    cfg = cfg or load_config()
+    if role == "editor":
+        return cfg.editor.model or "llama3.2"
+    return cfg.classifier.model or "llama3.2"
+
+
+def role_system_prompt(cfg: AppConfig | None = None, role: str = "classifier") -> str:
+    """Системный промпт роли (у каждой роли свой, хранится в конфиге)."""
+    cfg = cfg or load_config()
+    if role == "editor":
+        return cfg.editor_system_prompt
+    return cfg.system_prompt
 
 
 def get_config_path() -> str:
