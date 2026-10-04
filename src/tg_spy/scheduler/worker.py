@@ -49,21 +49,35 @@ def _tick() -> None:
                 logger.error("Ошибка авто-обновления ленты: %s", e)
             _last_feed = now
 
-        # ИИ-классификатор (локальная модель): запускается только когда
-        # включён переключатель schedule.enabled — чтобы не тратить ресурсы
-        # модели впустую. При выключенном переключателе лента продолжает
-        # обновляться, но модель не вызывается.
-        if not sched.enabled:
+        # Если ни классификатор, ни редактор не включены — дальше не идём
+        # (обновление ленты выше уже выполнено).
+        if not sched.enabled and not sched.editor_enabled:
             return
-        topic_min = max(1, int(sched.topic_minutes))
-        for t in list_topics():
-            if not t.get("active"):
-                continue
-            interval = max(1, int(t.get("schedule_minutes") or topic_min))
-            lr = _last_run.get(t["id"], 0.0)
-            if now - lr >= interval * 60:
-                _last_run[t["id"]] = now
-                _agent_pool.submit(_run_topic, t["id"])
+
+        # ИИ-классификатор (локальная модель): запускается только когда
+        # включён переключатель schedule.enabled И выключен редактор — чтобы
+        # не тратить ресурсы модели впустую и не конкурировать за слабую
+        # модель с редактором (переключатели взаимоисключающие).
+        if sched.enabled and not sched.editor_enabled:
+            topic_min = max(1, int(sched.topic_minutes))
+            for t in list_topics():
+                if not t.get("active"):
+                    continue
+                interval = max(1, int(t.get("schedule_minutes") or topic_min))
+                lr = _last_run.get(t["id"], 0.0)
+                if now - lr >= interval * 60:
+                    _last_run[t["id"]] = now
+                    _agent_pool.submit(_run_topic, t["id"])
+
+        # ИИ-редактор (локальная модель): запускается только когда включён
+        # переключатель editor_enabled И выключен классификатор. Редактор
+        # обрабатывает посты от самых свежих и далее по порядку
+        # (см. topics.editor.run_editor_batch).
+        if sched.editor_enabled and not sched.enabled:
+            editor_min = max(1, int(sched.editor_minutes))
+            if now - _last_editor >= editor_min * 60:
+                _last_editor = now
+                _agent_pool.submit(_run_editor)
     except Exception as e:  # noqa: BLE001
         logger.error("Ошибка планировщика: %s", e)
 
@@ -76,9 +90,18 @@ def _run_topic(topic_id: int) -> None:
         logger.error("Ошибка агента по теме id=%s: %s", topic_id, e)
 
 
+def _run_editor() -> None:
+    try:
+        from ..topics import editor as editor_svc
+        editor_svc.run_editor_async(days=None)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Ошибка ИИ-редактора: %s", e)
+
+
 # Состояние между тиками.
 _last_feed = 0.0
 _last_run: dict[int, float] = {}
+_last_editor = 0.0
 
 
 def start_scheduler() -> None:

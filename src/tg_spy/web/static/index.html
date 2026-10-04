@@ -48,11 +48,17 @@
     <!-- Вкладка 1: последние посты (главная) -->
     <section id="tab-posts" class="tab-panel">
       <div class="card">
-        <h2>Лента новостей <span id="posts-source-label" class="hint" style="margin:0;font-weight:400;"></span> <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты за последние 24 часа">Свежие за 24ч</button>
+        <h2>Лента новостей <span id="posts-source-label" class="hint" style="margin:0;font-weight:400;"></span> <button id="refresh-posts" class="ghost" title="Подтянуть свежие посты">Обновить ленту</button>
           <label class="ai-toggle" title="Включить ИИ-классификатор">
             <input type="checkbox" id="classifier-toggle">
             <span class="toggle-track">
               <span class="toggle-thumb">🤖</span>
+            </span>
+          </label>
+          <label class="ai-toggle" title="Включить ИИ-редактор (обрабатывает посты от самых свежих)">
+            <input type="checkbox" id="editor-toggle">
+            <span class="toggle-track">
+              <span class="toggle-thumb">✍️</span>
             </span>
           </label>
         </h2>
@@ -62,9 +68,8 @@
           <button class="chip" data-kind="rss">RSS</button>
           <span class="filter-sep"></span>
           <div class="tag-filter" id="tag-filter">
-            <button type="button" id="tag-filter-btn" class="tag-filter-select" aria-haspopup="true" aria-expanded="false">Теги: все</button>
+            <button type="button" id="tag-filter-btn" class="tag-filter-select" aria-haspopup="true" aria-expanded="false">Теги: не выбрано</button>
             <div id="tag-filter-pop" class="tag-filter-pop hidden" role="menu">
-              <label class="tf-row tf-all"><input type="checkbox" id="tag-filter-all" checked /> Все теги</label>
               <div id="tag-filter-list"></div>
             </div>
           </div>

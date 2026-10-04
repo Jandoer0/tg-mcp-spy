@@ -53,6 +53,11 @@ class ScheduleConfig(BaseModel):
     enabled: bool = True
     feed_refresh_minutes: int = 60
     topic_minutes: int = 1440
+    # ИИ-редактор: включён ли периодический запуск редактора (взаимоисключающе
+    # с классификатором — одновременно активен только один переключатель).
+    editor_enabled: bool = False
+    # Период периодического запуска ИИ-редактора (мин).
+    editor_minutes: int = 1440
 
 
 class ClassifierConfig(BaseModel):
@@ -138,6 +143,8 @@ class AppConfig(BaseModel):
                 "enabled": d["schedule"]["enabled"],
                 "feedRefreshMinutes": d["schedule"]["feed_refresh_minutes"],
                 "topicMinutes": d["schedule"]["topic_minutes"],
+                "editorEnabled": d["schedule"]["editor_enabled"],
+                "editorMinutes": d["schedule"]["editor_minutes"],
             },
             "providers": {name: prov_to_dict(p) for name, p in d["providers"].items()},
         }
@@ -196,6 +203,8 @@ class AppConfig(BaseModel):
                 enabled=bool(sched.get("enabled", True)),
                 feed_refresh_minutes=int(sched.get("feedRefreshMinutes", 60)),
                 topic_minutes=int(sched.get("topicMinutes", 1440)),
+                editor_enabled=bool(sched.get("editorEnabled", False)),
+                editor_minutes=int(sched.get("editorMinutes", 1440)),
             ),
             providers=providers,
         )

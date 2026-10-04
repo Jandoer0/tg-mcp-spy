@@ -6,6 +6,9 @@ import { $, api, escapeHtml, toast } from "./core.js";
 import { state } from "./state.js";
 import { buildPostEl } from "./components.js";
 
+// Таймер дебаунса сохранения позиции скролла ленты в sessionStorage.
+let _scrollSaveT = null;
+
 export function updateSourceLabel() {
   const label = $("#posts-source-label");
   const clearChip = $("#chip-clear-source");
@@ -52,7 +55,7 @@ export async function loadPosts(reset = true) {
     if (reset) {
       if (!data.posts.length) {
         box.innerHTML =
-          '<div class="empty">Постов пока нет. Нажмите «Свежие за 24ч», чтобы подтянуть новости.</div>';
+          '<div class="empty">Постов пока нет. Нажмите «Обновить ленту», чтобы подтянуть новости.</div>';
         state.postsHasMore = false;
         return;
       }
@@ -62,6 +65,7 @@ export async function loadPosts(reset = true) {
     for (const p of data.posts) frag.appendChild(buildPostEl(p));
     box.appendChild(frag);
     await decoratePostTags(box, data.posts);
+    restoreScroll();
     state.postsOffset += data.posts.length;
     state.postsHasMore = data.posts.length === state.postsLimit;
   } catch (e) {
@@ -126,6 +130,8 @@ async function decoratePostTags(box, posts) {
 // Добавить свежие посты (последние сутки) строго сверху, не перерисовывая уже загруженные.
 export async function prependFresh() {
   const box = $("#posts");
+  const prevScroll = window.scrollY || window.pageYOffset || 0;
+  const prevHeight = document.documentElement.scrollHeight;
   let path;
   if (state.currentTags.length) {
     path = `/api/posts?tags=${encodeURIComponent(state.currentTags.join(","))}`;
@@ -148,7 +154,18 @@ export async function prependFresh() {
   const empty = box.querySelector(".empty");
   if (empty) empty.remove();
   await decoratePostTags(box, fresh);
+  const added = document.documentElement.scrollHeight - prevHeight;
+  if (prevScroll > 8 && added > 0) {
+    window.scrollTo(0, prevScroll + added);
+  }
   return fresh.length;
+}
+
+// Восстановить позицию чтения из sessionStorage после перезагрузки/переключения вкладки.
+function restoreScroll() {
+  const saved = Number(sessionStorage.getItem("tg-posts-scroll") || 0);
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  if (saved > 0 && saved <= max) window.scrollTo(0, saved);
 }
 
 // ----- Фильтр по тегам (выпадающий список с возможностью выбрать несколько) -----
@@ -173,7 +190,7 @@ function updateTagFilterLabel() {
   if (!btn) return;
   btn.textContent = state.currentTags.length
     ? "Теги: " + state.currentTags.join(", ")
-    : "Теги: все";
+    : "Теги: не выбрано";
 }
 
 function syncTagFilterUI() {
@@ -289,6 +306,10 @@ export function initPosts() {
     const nearBottom =
       y + window.innerHeight >= document.documentElement.scrollHeight - 400;
     if (nearBottom) loadMorePosts();
+    if (_scrollSaveT) clearTimeout(_scrollSaveT);
+    _scrollSaveT = setTimeout(() => {
+      sessionStorage.setItem("tg-posts-scroll", String(window.scrollY || 0));
+    }, 400);
   });
 
 }

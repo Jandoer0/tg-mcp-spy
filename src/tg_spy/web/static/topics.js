@@ -513,30 +513,40 @@ export function initTopics() {
   // может находиться во вкладке, которая ещё не открывалась).
   populateTimezones();
 
-  // Переключатель ИИ-классификатора в шапке ленты
-  const classifierToggle = document.getElementById("classifier-toggle");
-  if (classifierToggle) {
-    // Загрузка состояния из конфига
-    api("/api/config").then((cfg) => {
-      const isEnabled = cfg && cfg.schedule && cfg.schedule.enabled;
-      classifierToggle.checked = !!isEnabled;
-    }).catch(() => {});
+  // Переключатели «ИИ-классификатор» и «ИИ-редактор» в шапке ленты.
+  // Одновременно активен только один из них (взаимоисключающие).
+  const aiClassifier = document.getElementById("classifier-toggle");
+  const aiEditor = document.getElementById("editor-toggle");
 
-    // Обработчик переключения
-    classifierToggle.addEventListener("change", async () => {
-      const enabled = classifierToggle.checked;
+  // Исходное состояние из конфига.
+  api("/api/config").then((cfg) => {
+    const sched = (cfg && cfg.schedule) || {};
+    if (aiClassifier) aiClassifier.checked = !!sched.enabled;
+    if (aiEditor) aiEditor.checked = !!sched.editorEnabled;
+  }).catch(() => {});
+
+  // Сохранить режим ИИ (none | classifier | editor) в конфиг.
+  async function applyAiMode(mode) {
+    const schedule =
+      mode === "classifier"
+        ? { enabled: true, editorEnabled: false }
+        : mode === "editor"
+          ? { enabled: false, editorEnabled: true }
+          : { enabled: false, editorEnabled: false };
+    await api("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schedule }),
+    });
+  }
+
+  if (aiClassifier) {
+    aiClassifier.addEventListener("change", async () => {
+      const on = aiClassifier.checked;
       try {
-        await api("/api/config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            schedule: { enabled }
-          }),
-        });
-        if (enabled) {
-          // Включили классификатор — сразу подтянуть свежие посты и
-          // запустить ИИ-агента по всем активным темам, чтобы модель
-          // не простаивала (иначе первый прогон только по расписанию).
+        if (on) {
+          await applyAiMode("classifier");
+          if (aiEditor) aiEditor.checked = false;
           try {
             await api("/api/refresh/posts", {
               method: "POST",
@@ -549,11 +559,45 @@ export function initTopics() {
           } catch (_e) { /* агент запустится по расписанию */ }
           toast("ИИ-классификатор включён — модель запущена");
         } else {
+          await applyAiMode("none");
           toast("ИИ-классификатор выключен");
         }
       } catch (e) {
         toast(e.message, true);
-        classifierToggle.checked = !enabled; // откат при ошибке
+        aiClassifier.checked = !on;
+      }
+    });
+  }
+
+  if (aiEditor) {
+    aiEditor.addEventListener("change", async () => {
+      const on = aiEditor.checked;
+      try {
+        if (on) {
+          await applyAiMode("editor");
+          if (aiClassifier) aiClassifier.checked = false;
+          try {
+            await api("/api/refresh/posts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ days: 1 }),
+            });
+          } catch (_e) { /* обновление ленты не критично */ }
+          try {
+            await api("/api/editor/run", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ days: 1 }),
+            });
+          } catch (_e) { /* редактор запустится по расписанию */ }
+          toast("ИИ-редактор включён — обработка постов запущена");
+        } else {
+          await applyAiMode("none");
+          toast("ИИ-редактор выключен");
+        }
+      } catch (e) {
+        toast(e.message, true);
+        aiEditor.checked = !on;
       }
     });
   }
