@@ -170,6 +170,10 @@
             <span class="field-label">Модель</span>
             <select name="model" id="cfg-model"><option value="">— выберите модель —</option></select>
           </label>
+                    <label class="field">
+            <span class="field-label">Системный промпт (инструкция модели-классификатору)</span>
+            <textarea name="systemPrompt" rows="5" placeholder="Ты — строгий фильтр новостей..."></textarea>
+          </label>
           <div class="provider-actions">
             <button type="submit" id="config-save">Сохранить</button>
             <button type="button" id="config-test" class="ghost">Проверить соединение</button>
@@ -197,6 +201,10 @@
           <label class="field">
             <span class="field-label">Модель</span>
             <select name="editorModel" id="editor-model"><option value="">— как у провайдера (общая модель) —</option></select>
+          </label>
+                    <label class="field">
+            <span class="field-label">Системный промпт (инструкция ИИ-редактору)</span>
+            <textarea name="editorSystemPrompt" rows="5" placeholder="Ты — редактор новостной ленты..."></textarea>
           </label>
           <div class="provider-actions">
             <button type="button" id="editor-save">Сохранить</button>

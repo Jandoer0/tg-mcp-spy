@@ -412,6 +412,12 @@ async def api_config(request: Request) -> JSONResponse:
         cur["editor"]["provider"] = e_data.get("provider", cur["editor"]["provider"])
         cur["editor"]["model"] = e_data.get("model", cur["editor"]["model"])
 
+    # Системные промпты (редактируются пользователем в карточках ИИ).
+    if "systemPrompt" in data:
+        cur["systemPrompt"] = data["systemPrompt"]
+    if "editorSystemPrompt" in data:
+        cur["editorSystemPrompt"] = data["editorSystemPrompt"]
+
     # Обновление провайдеров (глобальный список доступных коннектов)
     if "providers" in data:
         provs = data["providers"]
@@ -438,6 +444,12 @@ async def api_config(request: Request) -> JSONResponse:
         save_config(new_cfg)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+    # При выключении переключателей — немедленно прервать активные запросы к
+    # модели (закрыть соединение = чёткий сигнал модели остановить генерацию).
+    if not new_cfg.schedule.enabled:
+        agent.abort_requests("classifier")
+    if not new_cfg.schedule.editor_enabled:
+        agent.abort_requests("editor")
     return JSONResponse({"ok": True})
 
 

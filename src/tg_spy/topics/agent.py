@@ -31,6 +31,39 @@ from ..db import (
 
 logger = logging.getLogger(__name__)
 
+# Реестр активных HTTP-клиентов к модели для принудительного прерывания.
+# Закрытие соединения извне = чёткий сигнал модели остановить генерацию
+# (используется, когда пользователь выключает соответствующий переключатель).
+# Ключ — id объекта клиента; значение — (клиент, kind).
+_active_requests: dict[int, tuple] = {}
+_active_lock = threading.Lock()
+
+
+def abort_requests(kind: str | None = None) -> int:
+    """Принудительно оборвать активные запросы к модели.
+
+    Если ``kind`` задан ("classifier"/"editor") — только соответствующие,
+    иначе все. Закрытие клиента прерывает блокирующий вызов и заставляет
+    модель прекратить генерацию. Возвращает число прерванных соединений.
+    """
+    with _active_lock:
+        targets = [
+            (cid, _active_requests[cid])
+            for cid in list(_active_requests)
+            if kind is None or _active_requests[cid][1] == kind
+        ]
+        for cid, _ in targets:
+            del _active_requests[cid]
+    n = 0
+    for _cid, (client, _k) in targets:
+        try:
+            client._tg_aborted = True
+            client.close()
+            n += 1
+        except Exception:
+            pass
+    return n
+
 # Сколько постов за один вызов модели.
 AGENT_BATCH = int(os.environ.get("AGENT_BATCH", "10"))
 # Максимальная длина текста поста, передаваемая модели.
@@ -47,8 +80,13 @@ AGENT_RETRY_BACKOFF = float(os.environ.get("AGENT_RETRY_BACKOFF", "1.5"))
 AGENT_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 
 
-def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] = None, provider_name: str = "classifier") -> Optional[str]:
-    """Один вызов OpenAI-совместимого chat/completions. Возвращает текст."""
+def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] = None, provider_name: str = "classifier", abortable: bool = False) -> Optional[str]:
+    """Один вызов OpenAI-совместимого chat/completions. Возвращает текст.
+
+    Если ``abortable=True`` — текущий HTTP-клиент регистрируется в глобальном
+    реестре, чтобы внешний вызов :func:`abort_requests` мог принудительно
+    оборвать соединение (чёткий сигнал модели остановиться).
+    """
     cfg = load_config()
     prov = get_provider(cfg, provider_name=provider_name)
     base = (prov.base_url or "http://127.0.0.1:11434/v1").rstrip("/")
@@ -85,16 +123,29 @@ def _chat(messages: list[dict], temperature: float = 0.0, model: Optional[str] =
 
     attempts = max(0, AGENT_RETRIES) + 1
     last_err: Optional[Exception] = None
+    client = None
     for attempt in range(attempts):
         try:
-            resp = httpx.post(
-                url, headers=headers, json=payload, timeout=AGENT_REQUEST_TIMEOUT
-            )
+            client = httpx.Client(timeout=AGENT_REQUEST_TIMEOUT)
+            if abortable:
+                with _active_lock:
+                    _active_requests[id(client)] = (client, provider_name)
+            try:
+                resp = client.post(url, headers=headers, json=payload)
+            finally:
+                if abortable:
+                    with _active_lock:
+                        _active_requests.pop(id(client), None)
+            client.close()
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"]
         except Exception as e:  # таймаут, сетевая ошибка, не-JSON, 5xx
             last_err = e
+            # Прервано извне (выключение переключателя) — повторять не нужно.
+            if client is not None and getattr(client, "_tg_aborted", False):
+                logger.info("Запрос к модели прерван извне (переключатель выключен)")
+                return None
             logger.warning(
                 "Ошибка обращения к модели (попытка %d/%d, %s): %s",
                 attempt + 1, attempts, url, e,
@@ -169,7 +220,7 @@ def match_topic_posts(
     if not posts:
         return []
     if content is None:
-        content = _chat(_build_messages(topic, posts))
+        content = _chat(_build_messages(topic, posts), abortable=True)
     obj = _extract_json(content)
     if not obj:
         return []
@@ -309,23 +360,7 @@ def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> 
     if len(text) > max_chars:
         text = text[:max_chars]
     cfg = load_config()
-    system = (
-        "Ты — редактор новостной ленты. Твоя задача — очистить текст от мусора, \n"
-        "сохранив при этом структуру, смысл и attribution (указание источников).\n\n"
-        "Правила обработки:\n"
-        "1. ДУБЛИКАТЫ (КРИТИЧНО): Тщательно проверь весь текст. Если одна и та же строка, \n"
-        "   заголовок или абзац повторяется дважды (в начале, в конце или внутри), \n"
-        "   ОСТАВЬ ТОЛЬКО ОДИН экземпляр. Удаляй все полные или почти полные повторы.\n"
-        "2. РЕКЛАМА И ПРИЗЫВЫ: Удаляй явные призывы подписаться, лайкнуть, перейти в бот \n"
-        "   (например: «Подпишись», «Больше новостей на...», «@channel_name», «Жми колокольчик»).\n"
-        "3. ИСТОЧНИКИ НОВОСТЕЙ: НЕ удаляй названия медиа, каналов или сайтов, если они \n"
-        "   стоят в конце строки как указание источника (например: «— iPhones.ru», «Источник: Meduza»). \n"
-        "   Это важная часть новостной сводки.\n"
-        "4. ЭМОДЗИ: Удаляй декоративные эмодзи (💬, 🔗, 🩷), но оставляй смысловые (флаги, валюты).\n"
-        "5. ФОРМАТИРОВАНИЕ: Исправляй лишние пустые строки (оставляй одну между абзацами/новостями). \n"
-        "   Сохраняй переносы строк, если они разделяют разные новости.\n\n"
-        "ВАЖНО: Верни только очищенный текст. Не добавляй своих комментариев, вступлений или заключений."
-    )
+    system = cfg.editor_system_prompt
     content = _chat(
         [
             {"role": "system", "content": system},
@@ -333,7 +368,7 @@ def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> 
         ],
         temperature=0.0,
         model=model,
-        provider_name="editor",
+        provider_name="editor", abortable=True,
     )
     if content is None:
         return None

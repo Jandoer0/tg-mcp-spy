@@ -133,6 +133,8 @@ export async function loadConfig() {
     if (baseUrlInput) baseUrlInput.value = classifierProv.baseUrl || "";
     if (apiKeyInput) apiKeyInput.value = classifierProv.apiKey || "";
     if (modelInput) modelInput.value = (cfg.classifier && cfg.classifier.model) || "";
+    const sysPromptInput = card.querySelector("[name=systemPrompt]");
+    if (sysPromptInput) sysPromptInput.value = (cfg.systemPrompt) || "";
     
     // Часовой пояс
     state.timezone = (cfg && cfg.timezone) || "";
@@ -157,6 +159,8 @@ export async function loadConfig() {
     if (editorModelSel) {
         editorModelSel.value = (cfg.editor && cfg.editor.model) || "";
     }
+    const edSysPromptInput = document.querySelector("[name=editorSystemPrompt]");
+    if (edSysPromptInput) edSysPromptInput.value = (cfg.editorSystemPrompt) || "";
     
     // Теперь, когда все поля заполнены, загружаем списки моделей и
     // подставляем в выпадающие списки модели, сохранённые в конфиге.
@@ -339,6 +343,7 @@ async function saveConfig(e) {
       apiKey: card.querySelector("[name=apiKey]").value.trim() || "ollama",
     },
     model: card.querySelector("[name=model]").value.trim(),
+    systemPrompt: (card.querySelector("[name=systemPrompt]") || {}).value || "",
   };
 
   // Данные редактора
@@ -357,6 +362,8 @@ async function saveConfig(e) {
   const payload = {
     classifier: classifierPayload,
     editor: editorPayload,
+    systemPrompt: (card.querySelector("[name=systemPrompt]") || {}).value || "",
+    editorSystemPrompt: (document.querySelector("[name=editorSystemPrompt]") || {}).value || "",
   };
 
   try {

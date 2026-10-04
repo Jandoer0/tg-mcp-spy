@@ -362,6 +362,10 @@
     .provider-form input { background: var(--input-bg); color: var(--text);
       border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px;
       flex: 0 0 auto; width: 100%; }
+    .provider-form textarea { background: var(--input-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px;
+      font-size: 14px; font-family: inherit; width: 100%; resize: vertical; line-height: 1.5; }
+    .provider-form textarea:focus { outline: none; border-color: var(--accent); }
     .provider-form select { width: 100%; }
     .provider-form input:focus { outline: none; border-color: var(--accent); }
     .provider-form .ghost.small { align-self: flex-start; padding: 6px 12px; font-size: 12px; }
