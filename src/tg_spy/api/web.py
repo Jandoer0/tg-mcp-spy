@@ -451,10 +451,16 @@ async def api_config(request: Request) -> JSONResponse:
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     # При выключении переключателей — немедленно прервать активные запросы к
-    # модели (закрыть соединение = чёткий сигнал модели остановить генерацию).
-    if not new_cfg.schedule.enabled:
+    # модели (закрыть соединение = чёткий сигнал модели остановить генерацию)
+    # и пометить роль остановленной (новые попытки не начинаются).
+    # При включении — снять признак остановки (роль снова может работать).
+    if new_cfg.schedule.enabled:
+        provider.resume_role("classifier")
+    else:
         agent.abort_requests("classifier")
-    if not new_cfg.schedule.editor_enabled:
+    if new_cfg.schedule.editor_enabled:
+        provider.resume_role("editor")
+    else:
         agent.abort_requests("editor")
     return JSONResponse({"ok": True})
 

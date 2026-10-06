@@ -87,3 +87,21 @@ def test_connection_error_same_shape_for_both_roles():
             assert res["ok"] is False
             assert res["error"]
             assert "model" in res
+
+
+def test_timeout_no_retry():
+    # Таймаут не должен повторяться (общее правило для ролей).
+    # Это предотвращает многоминутные зависания на одном длинном посте.
+    with respx.mock:
+        # Любой запрос вызывает Timeout (через side_effect httpx.ReadTimeout)
+        respx.post(EDITOR_URL).mock(side_effect=httpx.ReadTimeout("request timed out"))
+        
+        # Вызываем роль (по умолчанию 3 попытки в provider.py)
+        result = provider.call_role("editor", [{"role": "user", "content": "test"}])
+        
+        # Должна быть только ОДНА попытка
+        assert result.attempts == 1
+        assert not result.ok
+        assert "timed out" in result.error.lower()
+        # Убеждаемся, что mock.post был вызван ровно 1 раз
+        assert respx.post(EDITOR_URL).call_count == 1

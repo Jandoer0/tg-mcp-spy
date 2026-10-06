@@ -31,14 +31,11 @@ EDITOR_BATCH = int(os.environ.get("EDITOR_BATCH", "10"))
 EDITOR_DAYS = int(os.environ.get("EDITOR_DAYS", "7"))
 
 
-def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> Optional[str]:
-    """Прогнать текст поста через ИИ-редактора (роль 'editor').
+def _edit_result(text: str, max_chars: int = 4000, model: Optional[str] = None):
+    """Вызвать модель редактора через единую ролевую логику (call_role).
 
-    Возвращает отредактированный текст или None при недоступности модели.
-    Использует единую для обеих ролей логику :func:`provider.call_role`
-    (как и классификатор): свой провайдер/модель из конфига, общие повторы,
-    ошибки и прерывание. Для диагностики — :func:`last_provider_error('editor')`
-    (тот же механизм и тексты, что у классификатора).
+    Возвращает полный результат (в т.ч. флаг `aborted` — прерывание
+    пользователем), чтобы пакетная обработка могла остановиться сразу.
     """
     text = (text or "").strip()
     if not text:
@@ -46,7 +43,7 @@ def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> 
     if len(text) > max_chars:
         text = text[:max_chars]
     cfg = load_config()
-    result = call_role(
+    return call_role(
         "editor",
         [
             {"role": "system", "content": cfg.editor_system_prompt},
@@ -57,7 +54,19 @@ def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> 
         model=model,
         abortable=True,
     )
-    if not result.ok:
+
+
+def edit_text(text: str, max_chars: int = 4000, model: Optional[str] = None) -> Optional[str]:
+    """Прогнать текст поста через ИИ-редактора (роль 'editor').
+
+    Возвращает отредактированный текст или None при недоступности модели.
+    Использует единую для обеих ролей логику :func:`provider.call_role`
+    (как и классификатор): свой провайдер/модель из конфига, общие повторы,
+    ошибки и прерывание. Для диагностики — :func:`last_provider_error('editor')`
+    (тот же механизм и тексты, что у классификатора).
+    """
+    result = _edit_result(text, max_chars=max_chars, model=model)
+    if result is None or not result.ok:
         return None
     return result.content or None
 
@@ -89,9 +98,18 @@ def edit_one_post(post_id: int) -> dict:
         return {"post_id": post_id, "ok": False, "error": "пустой текст", "skipped": True}
     # Уже отредактирован и не требует повтора — пропускаем при пакетном прогоне,
     # но для явного персонального запуска обрабатываем заново.
-    edited = edit_text(original)
-    if edited is None:
+    #
+    # Сразу помечаем пост 'editing': живой поллинг UI показывает на карточке
+    # состояние «ИИ редактор…» — видно, какой пост обрабатывается прямо сейчас.
+    set_post_editor_status(post_id, "editing")
+    result = _edit_result(original)
+    if result is None or not result.ok:
         set_post_editor_status(post_id, "none")
+        if result is not None and result.aborted:
+            # Прервано пользователем (выключен переключатель) — сигнал к
+            # немедленной остановке всей пакетной обработки.
+            logger.info("Редактура поста %s прервана пользователем", post_id)
+            return {"post_id": post_id, "ok": False, "aborted": True}
         detail = last_editor_error() or "нет соединения"
         logger.warning(
             "Модель редактора недоступна (пост %s): %s", post_id, detail,
@@ -102,6 +120,7 @@ def edit_one_post(post_id: int) -> dict:
             "error": "модель недоступна",
             "detail": detail,
         }
+    edited = result.content or ""
     saved = set_post_edited(post_id, edited)
     if saved:
         from ..db import set_post_editor_active
@@ -151,14 +170,11 @@ def run_editor_batch(days: Optional[int] = None, limit: Optional[int] = None) ->
     edited = 0
     skipped = 0
     errors = 0
-    # Кооперативная остановка: если ИИ-редактор выключен в конфиге — прерываем
-    # пакет, чтобы не грузить модель вхолостую. Перечитываем конфиг каждые
-    # несколько постов (дешевле, чем на каждом), но достаточно оперативно.
-    _cfg = load_config()
     for i, p in enumerate(rows):
-        if i % 5 == 0:
-            _cfg = load_config()
-        if not _cfg.schedule.editor_enabled:
+        # Кооперативная остановка: проверяем переключатель перед КАЖДЫМ
+        # постом (чтение config.json дешево на фоне минутных вызовов модели) —
+        # выключение должно останавливать пакет сразу, а не через 5 постов.
+        if not load_config().schedule.editor_enabled:
             logger.info("ИИ-редактор выключен — прерывание пакетной обработки")
             break
         pid = p["id"]
@@ -171,6 +187,11 @@ def run_editor_batch(days: Optional[int] = None, limit: Optional[int] = None) ->
             continue
         processed += 1
         res = edit_one_post(pid)
+        if res.get("aborted"):
+            # Прервано пользователем (выключен переключатель) — стоп немедленно,
+            # без дообработки остальных постов пачки.
+            logger.info("Пакетная редактура прервана пользователем (пост %s)", pid)
+            break
         if res.get("ok"):
             if res.get("changed"):
                 edited += 1

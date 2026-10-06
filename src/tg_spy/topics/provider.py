@@ -39,6 +39,22 @@ ROLE_REQUEST_TIMEOUT = float(os.environ.get("AGENT_REQUEST_TIMEOUT", "300.0"))
 # Последняя ошибка провайдера по каждой роли (для одинаковых оповещений в UI).
 _last_role_errors: dict[str, Optional[str]] = {"classifier": None, "editor": None}
 
+# Роли, остановленные пользователем (выключен переключатель). Пока роль в
+# этом множестве, новые запросы к её провайдеру отклоняются мгновенно —
+# выключение переключателя останавливает не только текущий запрос
+# (закрытие соединения), но и весь пакет, не давая ему продолжать работу.
+_stopped_roles: set[str] = set()
+
+
+def role_stopped(role: str) -> bool:
+    """Остановлена ли роль выключением переключателя."""
+    return role in _stopped_roles
+
+
+def resume_role(role: str) -> None:
+    """Снять признак остановки роли (при повторном включении переключателя)."""
+    _stopped_roles.discard(role)
+
 
 def last_provider_error(role: str = "classifier") -> Optional[str]:
     """Последняя ошибка обращения к провайдеру роли (роль — та же логика,
@@ -91,7 +107,13 @@ class ProviderCallResult:
 
 
 def abort_requests(kind: str | None = None) -> int:
-    """Прервать активные HTTP-запросы всех ролей или одной роли."""
+    """Прервать активные HTTP-запросы всех ролей или одной роли.
+
+    Кроме закрытия in-flight соединений помечает роль как остановленную:
+    новые запросы к ней отклоняются сразу (до повторного включения —
+    :func:`resume_role`), поэтому модель гарантированно замолкает
+    сразу после выключения переключателя.
+    """
     with _active_lock:
         targets = [
             (client_id, _active_requests[client_id])
@@ -100,6 +122,11 @@ def abort_requests(kind: str | None = None) -> int:
         ]
         for client_id, _ in targets:
             del _active_requests[client_id]
+
+    if kind:
+        _stopped_roles.add(kind)
+    else:
+        _stopped_roles.update(("classifier", "editor"))
 
     interrupted = 0
     for _client_id, (client, _provider_name) in targets:
@@ -335,6 +362,12 @@ class ProviderClient:
                     self.url,
                     last_error,
                 )
+                # Таймаут не повторяем: генерация дольше лимита воспроизводится
+                # и при повторе (тот же запрос — тот же результат), поэтому
+                # повтор лишь тратит ещё один полный таймаут. Общее правило
+                # для обеих ролей; сетевые/HTTP-ошибки повторяем как раньше.
+                if isinstance(error, httpx.TimeoutException):
+                    break
             finally:
                 if registered and client is not None:
                     with _active_lock:
@@ -346,11 +379,30 @@ class ProviderClient:
                         pass
 
             if attempt < attempts - 1:
+                # Роль остановили (выключен переключатель) между попытками —
+                # не начинаем новую: модель должна замолкнуть сразу.
+                if abortable and role_stopped(self.provider_name):
+                    logger.info(
+                        "Роль '%s' остановлена между попытками — прерываем",
+                        self.provider_name,
+                    )
+                    return ProviderCallResult.failure(
+                        provider_name=self.provider_name,
+                        model=self.model,
+                        url=self.url,
+                        error="Запрос к модели прерван пользователем",
+                        attempts=attempt + 1,
+                        aborted=True,
+                        status_code=last_status,
+                    )
                 time.sleep(max(0.0, retry_backoff) * (attempt + 1))
 
+        # Фактически выполнено попыток (может быть меньше `attempts`:
+        # таймаут не повторяем, остановка роли прерывает цикл).
+        tried = max(1, attempt + 1)
         logger.error(
             "Модель недоступна после %d попыток (роль=%s, модель=%s, %s): %s",
-            attempts,
+            tried,
             self.provider_name,
             self.model,
             self.url,
@@ -361,7 +413,7 @@ class ProviderClient:
             model=self.model,
             url=self.url,
             error=last_error,
-            attempts=attempts,
+            attempts=tried,
             status_code=last_status,
         )
 
@@ -384,6 +436,8 @@ def call_role(
     Одна и та же логика для обеих ролей: свой провайдер/модель из конфига,
     общие повторы/таймауты, общая фиксация последней ошибки
     (:func:`last_provider_error`) для одинаковых оповещений в UI.
+    Прерывание (выключение переключателя) останавливает запрос мгновенно,
+    а между попытками не даёт начать новую (см. :func:`abort_requests`).
     """
     result = ProviderClient(role, model=model).chat(
         messages,
