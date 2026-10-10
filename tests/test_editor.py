@@ -3,9 +3,9 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from tg_spy.config import load_config
-from tg_spy.topics import editor
-from tg_spy.db.repositories import posts
+from mcp_news.config import load_config
+from mcp_news.topics import editor
+from mcp_news.db.repositories import posts
 
 def test_edit_one_post_visibility():
     """Проверить, что при редактуре поста статус временно становится 'editing'."""
@@ -20,8 +20,8 @@ def test_edit_one_post_visibility():
     post_id = 1
     
     # Mock: модель возвращает текст
-    with patch("tg_spy.topics.editor._edit_result") as mock_edit:
-        from tg_spy.topics.provider import ProviderCallResult
+    with patch("mcp_news.topics.editor._edit_result") as mock_edit:
+        from mcp_news.topics.provider import ProviderCallResult
         mock_edit.return_value = ProviderCallResult(
             ok=True, content="Отредактированный текст", provider_name="editor", model="m", url="u", error=None
         )
@@ -46,12 +46,12 @@ def test_editor_batch_stops_on_disabled():
         MagicMock(schedule=MagicMock(editor_enabled=False)),
     ]
     
-    with patch("tg_spy.topics.editor.list_sources", return_value=[{"id": 1}]), \
-         patch("tg_spy.topics.editor.get_posts", return_value=mock_rows), \
-         patch("tg_spy.topics.editor.load_config", side_effect=config_sequence), \
-         patch("tg_spy.topics.editor._edit_result") as mock_edit:
+    with patch("mcp_news.topics.editor.list_sources", return_value=[{"id": 1}]), \
+         patch("mcp_news.topics.editor.get_posts", return_value=mock_rows), \
+         patch("mcp_news.topics.editor.load_config", side_effect=config_sequence), \
+         patch("mcp_news.topics.editor._edit_result") as mock_edit:
         
-        from tg_spy.topics.provider import ProviderCallResult
+        from mcp_news.topics.provider import ProviderCallResult
         mock_edit.return_value = ProviderCallResult(
             ok=True, content="Edited", provider_name="editor", model="m", url="u", error=None
         )
@@ -67,14 +67,14 @@ def test_editor_batch_stops_on_aborted():
     mock_rows = [{"id": i, "text": f"Текст {i}", "editor_status": "none"} for i in range(1, 11)]
     
     # 2. Mock: первая редактура возвращает aborted=True
-    with patch("tg_spy.topics.editor.list_sources", return_value=[{"id": 1}]), \
-         patch("tg_spy.topics.editor.get_posts", return_value=mock_rows), \
-         patch("tg_spy.topics.editor.load_config") as mock_cfg, \
-         patch("tg_spy.topics.editor._edit_result") as mock_edit:
+    with patch("mcp_news.topics.editor.list_sources", return_value=[{"id": 1}]), \
+         patch("mcp_news.topics.editor.get_posts", return_value=mock_rows), \
+         patch("mcp_news.topics.editor.load_config") as mock_cfg, \
+         patch("mcp_news.topics.editor._edit_result") as mock_edit:
         
         mock_cfg.return_value = MagicMock(schedule=MagicMock(editor_enabled=True))
         
-        from tg_spy.topics.provider import ProviderCallResult
+        from mcp_news.topics.provider import ProviderCallResult
         mock_edit.return_value = ProviderCallResult.failure(
             provider_name="editor", model="m", url="u", error="aborted", aborted=True
         )

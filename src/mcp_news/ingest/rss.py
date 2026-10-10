@@ -28,7 +28,7 @@ def fetch_feed(url: str) -> str:
         url,
         follow_redirects=True,
         timeout=20,
-        headers={"User-Agent": "Mozilla/5.0 (tg-mcp-spy)"},
+        headers={"User-Agent": "Mozilla/5.0 (mcp-news)"},
     )
     resp.raise_for_status()
     return resp.text

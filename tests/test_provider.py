@@ -11,8 +11,8 @@ import httpx
 import pytest
 import respx
 
-from tg_spy.config import load_config, role_system_prompt
-from tg_spy.topics import provider
+from mcp_news.config import load_config, role_system_prompt
+from mcp_news.topics import provider
 
 CLASSIFIER_URL = "http://127.0.0.1:11434/v1/chat/completions"
 EDITOR_URL = "http://127.0.0.1:11435/v1/chat/completions"

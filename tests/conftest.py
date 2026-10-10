@@ -3,8 +3,8 @@ import os
 
 import pytest
 
-_DB = "/tmp/tg_spy_pytest.db"
-_CFG = "/tmp/tg_spy_pytest_config.json"
+_DB = "/tmp/mcp_news_pytest.db"
+_CFG = "/tmp/mcp_news_pytest_config.json"
 for _p in (_DB, _CFG):
     try:
         os.remove(_p)
@@ -23,7 +23,7 @@ os.environ["AGENT_EDITOR_URL"] = "http://127.0.0.1:11435/v1"
 @pytest.fixture(autouse=True)
 def _clean_db():
     """Очищаем таблицы между тестами."""
-    from tg_spy.db import get_conn, init_db
+    from mcp_news.db import get_conn, init_db
 
     init_db()
     yield
@@ -39,7 +39,7 @@ def _clean_db():
 
 @pytest.fixture()
 def conn():
-    from tg_spy.db import get_conn, init_db
+    from mcp_news.db import get_conn, init_db
 
     init_db()
     return get_conn()

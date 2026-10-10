@@ -1,6 +1,6 @@
 """Тесты конфигурации: раздельные провайдеры ролей и симметрия структур."""
 
-from tg_spy.config import AppConfig, get_provider, load_config, save_config
+from mcp_news.config import AppConfig, get_provider, load_config, save_config
 
 
 def test_defaults():

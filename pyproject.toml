@@ -1,5 +1,5 @@
 [project]
-name = "tg-mcp-spy"
+name = "mcp-news"
 version = "0.3.0"
 description = "Агрегатор Telegram/RSS-лент с локальным ИИ-агентом и веб-интерфейсом"
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tg-spy = "tg_spy.cli:main"
+mcp-news = "mcp_news.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

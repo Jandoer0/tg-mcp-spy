@@ -1,7 +1,7 @@
 {
   "classifier": {
     "provider": {
-      "baseUrl": "http://host.containers.internal:11434/v1",
+      "baseUrl": "http://ollama:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
       "compat": {
@@ -14,7 +14,7 @@
   },
   "editor": {
     "provider": {
-      "baseUrl": "http://host.containers.internal:11434/v1",
+      "baseUrl": "http://ollama:11434/v1",
       "api": "openai-completions",
       "apiKey": "ollama",
       "compat": {

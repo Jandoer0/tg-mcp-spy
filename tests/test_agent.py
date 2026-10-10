@@ -2,8 +2,8 @@
 import httpx
 import respx
 
-from tg_spy.db import add_source, add_topic, get_tagged_total, save_posts
-from tg_spy.topics import agent
+from mcp_news.db import add_source, add_topic, get_tagged_total, save_posts
+from mcp_news.topics import agent
 
 MOCK_URL = "http://127.0.0.1:11434/v1/chat/completions"
 

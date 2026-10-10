@@ -29,7 +29,7 @@ from .provider import abort_requests, call_role, last_provider_error
 
 logger = logging.getLogger(__name__)
 
-# abort_requests переиспользуется из общего слоя (см. src/tg_spy/topics/provider.py).
+# abort_requests переиспользуется из общего слоя (см. src/mcp_news/topics/provider.py).
 __all__ = ["abort_requests"]
 
 # Сколько постов за один вызов модели.

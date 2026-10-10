@@ -18,8 +18,10 @@ wheels/
 # Локальные данные и инструкции агента
 /data/
 PROMT.md
-tg-mcp-spy.container
+PROMT.md.save
+mcp-news.container
 ARCHITECTURE.md
+AGENTS.md
 
 # uv lock не используем (ставим через pip)
 uv.lock

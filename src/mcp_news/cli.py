@@ -1,4 +1,4 @@
-"""Командный интерфейс tg-spy: serve | worker | migrate.
+"""Командный интерфейс mcp-news: serve | worker | migrate.
 
 Позволяет запускать веб+API+MCP и фоновый воркер независимо (например,
 воркер — отдельным контейнером, чтобы тяжёлый прогон агента не влиял
@@ -15,7 +15,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-logger = logging.getLogger("tg-spy")
+logger = logging.getLogger("mcp-news")
 
 
 def _env(name: str, default: str) -> str:
@@ -33,7 +33,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if args.reload:
         # В режиме перезагрузки — фабрика (пересоздаётся воркером).
         uvicorn.run(
-            "tg_spy.api.app:create_app", host=host, port=port,
+            "mcp_news.api.app:create_app", host=host, port=port,
             reload=True, factory=True,
         )
     else:
@@ -59,7 +59,7 @@ def cmd_migrate(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="tg-spy", description="tg-mcp-spy сервер")
+    p = argparse.ArgumentParser(prog="mcp-news", description="mcp-news сервер")
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("serve", help="веб-интерфейс + API + MCP на одном порту")

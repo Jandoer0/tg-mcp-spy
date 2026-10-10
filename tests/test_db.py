@@ -1,5 +1,5 @@
 """Тесты репозиториев (sources / posts / topics)."""
-from tg_spy.db import (
+from mcp_news.db import (
     add_source,
     add_topic,
     exclude_post,
@@ -31,7 +31,7 @@ def test_posts_flow():
         {"ext_id": "1", "text": "a", "date": "2026-01-01", "url": "u1"},
         {"ext_id": "2", "text": "b", "date": "2026-01-02", "url": "u2"},
     ]
-    from tg_spy.db import save_posts
+    from mcp_news.db import save_posts
 
     save_posts(src["id"], posts)
     got = get_posts([src["id"]], "1970-01-01")
@@ -41,7 +41,7 @@ def test_posts_flow():
 
 
 def test_topics_tagging_and_exclusions():
-    from tg_spy.db import save_posts
+    from mcp_news.db import save_posts
 
     add_source("telegram", "c1")
     src = list_sources()[0]
@@ -67,7 +67,7 @@ def test_topics_tagging_and_exclusions():
     assert get_excluded_ids(tid, [post_id]) == set()
 
     # Удаление темы каскадно чистит теги.
-    from tg_spy.db import remove_topic
+    from mcp_news.db import remove_topic
 
     assert remove_topic("Тест") is True
     assert get_tagged_posts(tid) == []

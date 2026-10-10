@@ -2,7 +2,7 @@
 import pytest
 from starlette.testclient import TestClient
 
-from tg_spy.api.app import create_app
+from mcp_news.api.app import create_app
 
 
 @pytest.fixture()

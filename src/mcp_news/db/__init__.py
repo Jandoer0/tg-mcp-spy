@@ -1,6 +1,6 @@
 """Публичный API слоя БД.
 
-Удобно импортировать всё отсюда: ``from tg_spy.db import add_source, ...``.
+Удобно импортировать всё отсюда: ``from mcp_news.db import add_source, ...``.
 """
 from __future__ import annotations
 

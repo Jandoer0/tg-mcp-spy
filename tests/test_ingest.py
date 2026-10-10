@@ -1,5 +1,5 @@
 """Тесты парсеров Telegram и RSS (без сети)."""
-from tg_spy.ingest import rss, telegram
+from mcp_news.ingest import rss, telegram
 
 TG_HTML = """
 <div class="tgme_widget_message_wrap">

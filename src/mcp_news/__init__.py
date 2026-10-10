@@ -1,4 +1,4 @@
-"""tg-mcp-spy — агрегатор Telegram/RSS-лент с локальным ИИ-агентом.
+"""mcp-news — агрегатор Telegram/RSS-лент с локальным ИИ-агентом.
 
 Архитектура: доменное ядро (db / ingest / topics) + адаптеры
 (веб-API на FastAPI, MCP-сервер) + фоновый воркер (scheduler).

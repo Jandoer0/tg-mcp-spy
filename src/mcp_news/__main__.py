@@ -1,4 +1,4 @@
-"""Точка входа для ``python -m tg_spy``."""
+"""Точка входа для ``python -m mcp_news``."""
 from __future__ import annotations
 
 import sys
